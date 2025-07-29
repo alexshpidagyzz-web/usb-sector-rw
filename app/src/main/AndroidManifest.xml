@@ -26,7 +26,17 @@
                 android:resource="@xml/device_filter" />
         </activity>
 
-        <activity android:name=".GraphActivity"/>
+<!--        <activity android:name=".GraphFreqActivity"/>-->
+
+<!--        <activity android:name=".FreqActivity"/>-->
+
+<!--        <activity android:name=".UvActivity"/>-->
+
+<!--        <activity android:name=".TempActivity"/>-->
+
+<!--        <activity android:name=".GraphTempActivity"/>-->
+
+<!--        <activity android:name=".GraphUvActivity"/>-->
 
         <provider
             android:name="androidx.core.content.FileProvider"

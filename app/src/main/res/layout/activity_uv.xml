@@ -11,33 +11,32 @@
         android:padding="20dp">
 
         <Button
-            android:id="@+id/btnMeasureTest"
+            android:id="@+id/btnUvTest"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Тест УФ измерения" />
+
+        <Button
+            android:id="@+id/btnUvExec"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Тест непрерывности измерений" />
-            
-        <Button
-            android:id="@+id/btnEchoTest"
+            android:text="Запустить измерение" />
+
+        <EditText
+            android:id="@+id/editUvRange"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Запуск измерения" />
+            android:hint="Введите диапазон УФ"
+            android:inputType="number"
+            android:layout_marginTop="12dp" />
 
         <Button
-            android:id="@+id/btnMeasureExec"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Частота + нормирование" />
-            
-        <Button
-            android:id="@+id/btnMeasureTracking"
+            android:id="@+id/btnSetUvRange"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Отслеживание частоты" />
-
-
+            android:text="Установить диапазон" />
         <Button
             android:id="@+id/graphButton"
             android:layout_width="match_parent"
@@ -46,7 +45,7 @@
             android:text="Открыть график" />
 
         <Button
-            android:id="@+id/сlearLog"
+            android:id="@+id/btnClearLog"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"

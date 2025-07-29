@@ -21,7 +21,6 @@
  * обработку его команд.
  **/
 
-import android.util.Log
 import com.example.usb_sector_rw.losp.*
 import java.nio.BufferOverflowException
 import java.nio.ByteBuffer
@@ -739,10 +738,75 @@ data class ParamCrcStruct(
     var data: ByteArray = ByteArray(PARAM_BUF_SIZE.toInt()),    // Обобщенный буфер параметров работы переменной длины
 ) {
 
-    companion object{
-        const val PARAM_BUF_SIZE = 64
-        const val SIZE_NO_BUF = 4 + 2 + 2 + 4 + 4 // = 16
-        const val SIZE_FULL = SIZE_NO_BUF + PARAM_BUF_SIZE // = 80
+    companion object {
+        const val PARAM_BUF_SIZE = 256 // Или иное фактическое значение
+        const val SIZE_IN_BYTES = 4 + 2 + 2 + 4 + 4 + PARAM_BUF_SIZE // = 272
+
+        fun fromByteArray(input: ByteArray): ParamCrcStruct {
+            val buffer = ByteBuffer.wrap(input).order(ByteOrder.LITTLE_ENDIAN)
+
+            val Crc32 = buffer.int.toUInt()
+            val ParamType = buffer.short.toUShort()
+            val ParamSize = buffer.get().toUShort()
+            val NameID = buffer.short.toUInt()
+            val DateEdit = buffer.int.toUInt()
+
+            val data = ByteArray(PARAM_BUF_SIZE)
+            buffer.get(data)
+
+            return ParamCrcStruct(Crc32, ParamType, ParamSize, NameID, DateEdit, data)
+        }
+    }
+
+    fun getRawData(): ByteArray {
+        val buffer = ByteBuffer.allocate(SIZE_IN_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+
+        // 1. Crc32
+        buffer.putInt(Crc32.toInt())
+
+        // 2. ParamType
+        buffer.putShort(ParamType.toShort())
+
+        // 3. ParamSize
+        buffer.putShort(ParamSize.toShort())
+
+        // 4. NameID
+        buffer.putInt(NameID.toInt())
+
+        // 5. DateEdit
+        buffer.putInt(DateEdit.toInt())
+
+        // 6. data
+        val dataPadded = data.copyOf(PARAM_BUF_SIZE)
+        buffer.put(dataPadded)
+
+        return buffer.array()
+    }
+
+    fun loadFromRawData(input: ByteArray) {
+        require(input.size >= SIZE_IN_BYTES) { "Expected at least $SIZE_IN_BYTES bytes, got ${input.size}" }
+
+        val buffer = ByteBuffer.wrap(input).order(ByteOrder.LITTLE_ENDIAN)
+
+        // 1. Crc32
+        Crc32 = buffer.int.toUInt()
+
+        // 2. ParamType
+        ParamType = buffer.short.toUShort()
+
+        // 3. ParamSize
+        ParamSize = buffer.short.toUShort()
+
+        // 4. NameID
+        NameID = buffer.int.toUInt()
+
+        // 5. DateEdit
+        DateEdit = buffer.int.toUInt()
+
+        // 6. data
+        val dataBytes = ByteArray(PARAM_BUF_SIZE)
+        buffer.get(dataBytes)
+        data = dataBytes
     }
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -772,53 +836,62 @@ data class ParamCrcStruct(
 }
 
 // Размер целостностной структуры параметров работы без обобщенного буфера, байт
-val PARAMCRC_SIZE_NO_BUF = ParamCrcStruct.SIZE_FULL - PARAM_BUF_SIZE.toInt()
+val PARAMCRC_SIZE_NO_BUF = ParamCrcStruct.SIZE_IN_BYTES - PARAM_BUF_SIZE.toInt()
 // Максимальный размер в байтах обменной структуры параметров работы PRAM
 val PARAM_USB_STRUCT_MAX_SIZE = MSD_DATA_MAX_SIZE - PARAM_BUF_SIZE.toUShort()  // Старое значение
 
-class ParamUsbStruct {
+data class ParamUsbStruct (
 
-    var structType: UShort = 0u
-    var structSize: UShort = 0u
-    var paramCrc: UInt = 0u
+    var structType: UShort,
+    var structSize: UShort,
+    var paramCrc: UInt,
+    var st : ParamCrcStruct,
+    var data : ByteArray = ByteArray(PARAM_USB_STRUCT_MAX_SIZE.toInt())
+)
+{
+    companion object {
+        const val PARAM_USB_STRUCT_MAX_SIZE = 508
+        const val SIZE_IN_BYTES =
+            2 + 2 + 4 + ParamCrcStruct.SIZE_IN_BYTES + PARAM_USB_STRUCT_MAX_SIZE
 
-    /** Внутренний union: либо ParamCrcStruct, либо необработанный массив байт */
-    var union = UnionPart()
+        @OptIn(ExperimentalUnsignedTypes::class)
+        fun fromByteArray(input: UByteArray): ParamUsbStruct {
+            val byteArray = input.asByteArray()
+            val buffer = ByteBuffer.wrap(byteArray).order(ByteOrder.LITTLE_ENDIAN)
 
-    /**
-     * Внутренний класс, представляющий union внутри ParamUsbStruct.
-     */
-    class UnionPart {
-        private var buffer = ByteBuffer
-            .allocate(PARAM_USB_STRUCT_MAX_SIZE.toInt())
-            .order(ByteOrder.LITTLE_ENDIAN)
+            val structType = buffer.short.toUShort()
+            val structSize = buffer.short.toUShort()
+            val paramCrc = buffer.int.toUInt()
 
-        var st = ParamCrcStruct( // TODO:SR
-            Crc32 = TODO(),
-            ParamType = TODO(),
-            ParamSize = TODO(),
-            NameID = TODO(),
-            DateEdit = TODO(),
-            data = TODO()
-        )
-        var data: ByteArray
-            get() = buffer.array()
-            set(value) {
-                require(value.size.toUInt() == PARAM_USB_STRUCT_MAX_SIZE) {
-                    "Expected $PARAM_USB_STRUCT_MAX_SIZE bytes, got ${value.size}"
-                }
-                buffer.clear()
-                buffer.put(value)
-                buffer.flip()
-            }
+            val stBytes = ByteArray(ParamCrcStruct.SIZE_IN_BYTES)
+            buffer.get(stBytes)
+            val st = ParamCrcStruct.fromByteArray(stBytes)
 
-        fun toByteArray(): ByteArray = buffer.array()
-        fun loadFrom(bytes: ByteArray) {
-            require(bytes.size.toUInt() == PARAM_USB_STRUCT_MAX_SIZE)
-            buffer.clear()
-            buffer.put(bytes)
-            buffer.flip()
+            val data = ByteArray(PARAM_USB_STRUCT_MAX_SIZE - ParamCrcStruct.SIZE_IN_BYTES - 4 - 2 - 2)
+            buffer.get(data)
+
+            return ParamUsbStruct(structType, structSize, paramCrc, st, data)
         }
+    }
+
+    @OptIn(ExperimentalUnsignedTypes::class)
+    fun toByteArray(): UByteArray {
+        val buffer = ByteBuffer.allocate(SIZE_IN_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+
+        buffer.putShort(structType.toShort())
+        buffer.putShort(structSize.toShort())
+        buffer.putInt(paramCrc.toInt())
+        buffer.put(st.getRawData())
+
+        val paddedData = if (data.size < PARAM_USB_STRUCT_MAX_SIZE) {
+            data + ByteArray(PARAM_USB_STRUCT_MAX_SIZE - data.size)
+        } else {
+            data.copyOf(PARAM_USB_STRUCT_MAX_SIZE)
+        }
+
+        buffer.put(paddedData)
+
+        return buffer.array().asUByteArray()
     }
 }
 
@@ -884,7 +957,7 @@ data class PramPowStruct(
     }
 }
 
-data class PramTempStruct(
+data class PramTempStruct @OptIn(ExperimentalUnsignedTypes::class) constructor(
     var structType: UShort,
     var structSize: UShort,
     var maxSize: UShort,
@@ -897,8 +970,42 @@ data class PramTempStruct(
     var tempCurrent: Float,
     var powAverage: Float,
     var tempAverage: Float,
-    var buf: ByteArray = ByteArray(TEMP_BUF_SIZE.toInt())
+    var buf: UByteArray = UByteArray(TEMP_BUF_SIZE.toInt())
 ) {
+    companion object {
+
+        val SIZE_IN_BYTES = 2 + 2 + 2 + 2 + 1 + 4 + 4 + 4 + 2 + 4 + 4 + 4 + TEMP_BUF_SIZE.toInt()
+
+
+        @OptIn(ExperimentalUnsignedTypes::class)
+        fun fromByteArray(data: UByteArray): PramTempStruct {
+            val byteBuffer = ByteBuffer.wrap(data.toByteArray())
+                .order(ByteOrder.LITTLE_ENDIAN)
+
+            return PramTempStruct(
+                structType = byteBuffer.short.toUShort(),
+                structSize = byteBuffer.short.toUShort(),
+                maxSize = byteBuffer.short.toUShort(),
+                validSize = byteBuffer.short.toUShort(),
+                bufDim = byteBuffer.get().toUByte(),
+                tempFixCount = byteBuffer.int.toUInt(),
+                systemPhase = byteBuffer.int,
+                systemClock = byteBuffer.int.toUInt(),
+                tempCode3 = byteBuffer.short.toUShort(),
+                tempCurrent = byteBuffer.float,
+                powAverage = byteBuffer.float,
+                tempAverage = byteBuffer.float,
+                buf = UByteArray(TEMP_BUF_SIZE.toInt()).apply {
+                val byteArray = ByteArray(size)
+                byteBuffer.get(byteArray)
+                byteArray.forEachIndexed { index, byte ->
+                    this[index] = byte.toUByte()
+                }
+            }
+            )
+        }
+    }
+
     init {
         require(buf.size.toUShort() == TEMP_BUF_SIZE) {
             "buf must be exactly $TEMP_BUF_SIZE bytes"
@@ -1048,7 +1155,7 @@ val AMOUNT: UByte = (AMRange.AM_RANGE_7.value - AMRange.AM_RANGE_0.value + 1u).t
 
 val AM_BUF_SIZE: UShort = (MSD_DATA_MAX_SIZE - 128u).toUShort()
 
-data class PramUvStruct(
+data class PramUvStruct @OptIn(ExperimentalUnsignedTypes::class) constructor(
     var structType: UShort,          // Тип структуры - STRUCT_UV_DATA
     var structSize: UShort,          // Размер структуры в байтах
     var validSize: UShort,           // Количество действительных данных в буфере buf
@@ -1069,8 +1176,91 @@ data class PramUvStruct(
     var powAverage: Float,           // Аналоговое питание МК, В
     var powerRange: Float,           // Питание ФЭУ для диапазона, В
     var powerCurrent: Float,         // Текущее питание ФЭУ после термокомпенсации, В
-    var buf: ByteArray = ByteArray(AM_BUF_SIZE.toInt())              // Буфер нормированных значений сигнала ФЭУ
+    var buf: UByteArray = UByteArray(AM_BUF_SIZE.toInt())              // Буфер нормированных значений сигнала ФЭУ
 ) {
+    companion object {
+        var SIZE_BYTES: Int =
+            2 +  // structType: UShort
+            2 +  // structSize: UShort
+            2 +  // validSize: UShort
+            1 +  // maxSize: UByte
+            1 +  // bufDim: UByte
+            4 +  // uvFixCount: UInt
+            4 +  // systemPhase: Int
+            4 +  // systemClock: UInt
+            2 +  // uvCode: UShort
+            4 +  // uvCode1: Float
+            1 +  // uvRange: UByte
+            4 +  // uvOffset: Float
+            4 +  // uvLevel: Float
+            4 +  // uvValue: Float
+            4 +  // uvAverage: Float
+            4 +  // uvCalibr: Float
+            4 +  // tempAverage: Float
+            4 +  // powAverage: Float
+            4 +  // powerRange: Float
+            4 +  // powerCurrent: Float
+            AM_BUF_SIZE.toInt()  // buf: ByteArray
+
+        @OptIn(ExperimentalUnsignedTypes::class)
+        fun fromByteArray(data: UByteArray): PramUvStruct {
+            if (data.size < SIZE_BYTES) {
+                return PramUvStruct(
+                    structType = 0u,
+                    structSize = 0u,
+                    validSize = 0u,
+                    maxSize = 0u,
+                    bufDim = 0u,
+                    uvFixCount = 0u,
+                    systemPhase = 0,
+                    systemClock = 0u,
+                    uvCode = 0u,
+                    uvCode1 = -1f,
+                    uvRange = 0u,
+                    uvOffset = -1f,
+                    uvLevel = -1f,
+                    uvValue = -1f,
+                    uvAverage = -1f,
+                    uvCalibr = -1f,
+                    tempAverage = -1f,
+                    powAverage = -1f,
+                    powerRange = -1f,
+                    powerCurrent = -1f,
+                    buf = UByteArray(AM_BUF_SIZE.toInt())
+                )
+            }
+
+            val byteArray = data.asByteArray()
+            val buffer = ByteBuffer.wrap(byteArray).order(ByteOrder.LITTLE_ENDIAN)
+
+            return PramUvStruct(
+                structType = buffer.short.toUShort(),
+                structSize = buffer.short.toUShort(),
+                validSize = buffer.short.toUShort(),
+                maxSize = buffer.get().toUByte(),
+                bufDim = buffer.get().toUByte(),
+                uvFixCount = buffer.int.toUInt(),
+                systemPhase = buffer.int,
+                systemClock = buffer.int.toUInt(),
+                uvCode = buffer.short.toUShort(),
+                uvCode1 = buffer.float,
+                uvRange = buffer.get().toUByte(),
+                uvOffset = buffer.float,
+                uvLevel = buffer.float,
+                uvValue = buffer.float,
+                uvAverage = buffer.float,
+                uvCalibr = buffer.float,
+                tempAverage = buffer.float,
+                powAverage = buffer.float,
+                powerRange = buffer.float,
+                powerCurrent = buffer.float,
+                buf = ByteArray(AM_BUF_SIZE.toInt()).also {
+                    buffer.get(it)
+                }.asUByteArray()
+            )
+        }
+    }
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false

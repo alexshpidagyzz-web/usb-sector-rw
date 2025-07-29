@@ -4,7 +4,7 @@ import android.os.Bundle
 import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
 
-class GraphActivity : AppCompatActivity() {
+class GraphTempActivity : AppCompatActivity() {
 
     private var isRunning = true
     private lateinit var graphView: CustomGraphView
@@ -17,7 +17,8 @@ class GraphActivity : AppCompatActivity() {
 
         Thread {
             while (isRunning) {
-                val value = LospDevVariables.getFrec()
+                val value = LospDevVariables.getTempExec(true, true)
+                graphView.isVertical = true
                 runOnUiThread { graphView.addPoint(value) }
                 Thread.sleep(500)
             }

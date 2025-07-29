@@ -1,7 +1,10 @@
 package com.example.usb_sector_rw.msd
 
+import BOARD_PRAM_ID
+import LospBoardStruct
 import SECTOR_ANSWER
 import SECTOR_CMD
+import SECTOR_LAST
 import SectorAnswer
 import SectorCmd
 import android.content.Context
@@ -164,5 +167,38 @@ class LospDev(private val context: Context) {
     fun msdBoardOpen(devNum: UByte): Boolean {
         // TODO: Реализовать открытие устройства
         return false
+    }
+
+    fun isLospDeviceConnected() : UInt
+    {
+        var ret = 0u
+        var temp_ret = false
+        var buf : ByteArray = ByteArray(512)
+        var p : LospBoardStruct
+
+        temp_ret = sectorRead( SECTOR_LAST, buf, ::log)
+
+        if(temp_ret)
+        {
+            p = LospBoardStruct.fromByteArray(buf)
+
+            temp_ret = (p.boardID and (0xFF.inv().toUInt())) == BOARD_PRAM_ID
+
+            if(temp_ret)
+            {
+                ret = 1u
+            }
+            else
+            {
+                ret = (p.boardID and (0xFF.inv().toUInt()))
+            }
+        }
+
+        return ret
+    }
+
+    fun log(message : String)
+    {
+
     }
 }

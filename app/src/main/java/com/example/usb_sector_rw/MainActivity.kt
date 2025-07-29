@@ -1,26 +1,43 @@
 package com.example.usb_sector_rw
 
 import FrequencyLogger
+import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Color
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import com.example.usb_sector_rw.LospDevVariables.isStopFrecExecMeasurment
+import com.example.usb_sector_rw.LospDevVariables.lospDev
+import com.example.usb_sector_rw.losp.FALSE
 import com.example.usb_sector_rw.msd.LospDev
+import com.example.usb_sector_rw.msd.set_uv_range
+import com.example.usb_sector_rw.msd.temp_exec
+import com.example.usb_sector_rw.msd.temp_test
+import com.example.usb_sector_rw.msd.uv_exec
+import com.example.usb_sector_rw.msd.uv_test
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,13 +47,23 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
+import kotlinx.coroutines.isActive
+import java.lang.Boolean.TRUE
+import kotlin.math.sqrt
+import androidx.core.view.isVisible
 
 
 object LospDevVariables {
     @SuppressLint("StaticFieldLeak")
     lateinit var lospDev: LospDev
     lateinit var log: (String) -> Unit
+    lateinit var blink_log: (String) -> Unit
+    var isRunMeasurment : Boolean = false;
     var isStopFrecExecMeasurment : Boolean = false;
+    var isRunFrecTrackingMeasurment : Boolean = false;
+    var isRunUvMeasurement : Boolean = false
+    var isRunTempMeasurement : Boolean = false
+    internal var measureJob: Job? = null
 
     fun getFrec() : Float
     {
@@ -59,6 +86,41 @@ object LospDevVariables {
     {
         frec_exec(lospDev, log, isStopFrecExecMeasurment)
     }
+
+    fun getFrecTracking()
+    {
+        frec_tracking(lospDev, log)
+    }
+
+    fun getUvTest()
+    {
+        uv_test(lospDev, log)
+    }
+
+    fun setUvRange(range : UInt)
+    {
+        set_uv_range(range, lospDev, log)
+    }
+
+    fun getUvExec(call_last : Boolean, is_graph : Boolean) : Float
+    {
+        var ret = uv_exec(lospDev, log, call_last, is_graph)
+
+        return ret
+    }
+
+    fun getTempTest()
+    {
+        temp_test(lospDev, log)
+    }
+
+    fun getTempExec(call_last : Boolean, is_graph : Boolean) : Float
+    {
+        var ret = temp_exec(lospDev, log, call_last, is_graph)
+
+        return ret
+    }
+
 }
 
 /**
@@ -80,6 +142,9 @@ class MainActivity : AppCompatActivity() {
         private const val ACTION_USB_PERMISSION = "com.example.usb_sector_rw.USB_PERMISSION"
     }
 
+    val options = listOf("0.1s", "0.2s", "0.5s", "1s", "5s", "10s", "60s", "1h", "1d", "авто")
+    val options_accuracy = listOf("0", "1", "2", "3", "4", "5", "7")
+
     private lateinit var sectorInput: EditText
     private lateinit var dataInput: EditText
     private lateinit var readBtn: Button
@@ -91,21 +156,35 @@ class MainActivity : AppCompatActivity() {
     private lateinit var offsetInput: TextView
     private lateinit var readBytesBtn: Button
     private lateinit var lengthInput: TextView
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
     private lateinit var detailSwitch: Switch
-    private lateinit var clearOutSwitch: Switch
-    private lateinit var echoButton: Button
-    private lateinit var stopMeasureButton: Button
-    private lateinit var testMeasureButton: Button
-    private lateinit var btnMeasureExec: Button
-    private lateinit var btnMeasureExecStop: Button
-    private lateinit var graphButton: Button
-    private lateinit var ClearLog: Button
-    private lateinit var  toggleButton: ImageButton
+    private lateinit var toggleButton: ImageButton
     private lateinit var toggleContainer: LinearLayout
+    private lateinit var btnOpenFrequency: Button
+    private lateinit var btnOpenUv: Button
+    private lateinit var btnOpenTemp: Button
+    private lateinit var gauge : FrequencyGaugeView
+    private lateinit var spinner : Spinner
+    private lateinit var usbOverlay: View
+    private lateinit var mainContent: View
+    private lateinit var usbConfirmButton: Button
+    private lateinit var usbAccess: UsbSectorAccess
+    private lateinit var accuracyOptionsSpinner : Spinner
+    private lateinit var unitSwitch: Switch
+    private lateinit var logTextView: TextView
+    private lateinit var clearLogSwitch: Switch
 
-    var isRunMeasurment : Boolean = false;
-    var isStopFrecExecMeasurment : Boolean = false;
-    private var measureJob: Job? = null
+    private var usbConnected = false
+    private var isAutoModeEnabled = false
+    private var frecJob: Job? = null
+
+    private var clickCount = 0
+    private var lastClickTime = 0L
+    private val tripleClickInterval = 600L
+    private var isLogVisible = false
+    private var blinkingAnimator: ObjectAnimator? = null
+    private var blinkingResetJob: Job? = null
+
     var expanded = false
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -129,85 +208,154 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        sectorInput = findViewById(R.id.sectorInput)
-        dataInput = findViewById(R.id.dataInput)
-        readBtn = findViewById(R.id.readBtn)
-        writeBtn = findViewById(R.id.writeBtn)
-        clearBtn = findViewById(R.id.clearBtn)
-        logText = findViewById(R.id.logText)
-        scanBtn = findViewById(R.id.scanBtn)
-        overwriteBtn = findViewById(R.id.overwriteBtn)
-        offsetInput = findViewById(R.id.offsetInput)
-        lengthInput = findViewById<EditText>(R.id.lengthInput)
-        readBytesBtn = findViewById<Button>(R.id.readBytesBtn)
-        detailSwitch = findViewById(R.id.detailSwitch)
-        echoButton = findViewById<Button>(R.id.btnEchoTest)
-        stopMeasureButton = findViewById<Button>(R.id.btnStopMeasure)
-        testMeasureButton = findViewById<Button>(R.id.btnMeasureTest)
-        btnMeasureExec = findViewById<Button>(R.id.btnMeasureExec)
-        clearOutSwitch = findViewById(R.id.clearOutSwitch)
-        btnMeasureExecStop = findViewById(R.id.btnMeasureExecStop)
-        graphButton = findViewById(R.id.graphButton)
-        ClearLog = findViewById(R.id.ClearLog)
-        toggleButton = findViewById(R.id.toggleButton)
-        toggleContainer = findViewById(R.id.toggleContainer)
+        usbAccess = UsbSectorAccess(this)
+
+        gauge = findViewById<FrequencyGaugeView>(R.id.frequencyGauge)
+        spinner = findViewById(R.id.frequencyOptionsSpinner)
+        usbOverlay = findViewById(R.id.usbOverlay)
+        mainContent = findViewById(R.id.mainContent)
+        usbConfirmButton = findViewById(R.id.usbConfirmButton)
+        accuracyOptionsSpinner = findViewById(R.id.accuracyOptionsSpinner)
+        unitSwitch = findViewById(R.id.unitSwitch)
+        logTextView = findViewById(R.id.logTextView)
+        clearLogSwitch = findViewById(R.id.clearLogSwitch)
+
+
+        val logControlContainer = findViewById<View>(R.id.logControlContainer)
+
+        clearLogSwitch.isChecked = true
+        logControlContainer.visibility = View.GONE
+        logTextView.visibility = View.GONE
+
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, options)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinner.adapter = adapter
+        spinner.setSelection(3)
+
+        val adapter_accuracy = ArrayAdapter(this, android.R.layout.simple_spinner_item, options_accuracy)
+        adapter_accuracy.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        accuracyOptionsSpinner.adapter = adapter_accuracy
+        accuracyOptionsSpinner.setSelection(1)
+
+        setupTripleClickToToggleLogs()
+
+        usbConfirmButton.setOnClickListener {
+            val ret = lospDev.isLospDeviceConnected()
+//            if (usbAccess.connect()) {
+//            if(true){
+            if(ret == 1u){
+                usbConnected = true
+                usbOverlay.visibility = View.GONE
+                mainContent.visibility = View.VISIBLE
+                usbAccess.close()
+                startFrequencyLoop()
+            } else {
+                if(ret == 0u)
+                {
+                    Toast.makeText(
+                        this,
+                        "USB Mass Storage устройство не найдено или нет разрешения.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                else
+                {
+                    Toast.makeText(
+                        this,
+                        "Неверный идентификатор устройства: $ret",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+
+        gauge.colorZoneProvider = { freq ->
+            when {
+                freq < 10f -> Color.GREEN
+                freq < 25f -> Color.rgb(255, 165, 0)
+                else -> Color.RED
+            }
+        }
+
+        var freqSpinnerInitialized = false
+        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+                if (!freqSpinnerInitialized) {
+                    freqSpinnerInitialized = true
+                    return
+                }
+
+                val selected = parent.getItemAtPosition(position).toString().trim()
+
+                when (selected) {
+                    "авто" -> {
+                        isAutoModeEnabled = true
+                    }
+
+                    "1h" -> {
+                        averaging_period = 3600f
+                        is_no_set = FALSE
+                        isAutoModeEnabled = false
+                    }
+
+                    "1d" -> {
+                        averaging_period = 86400f
+                        is_no_set = FALSE
+                        isAutoModeEnabled = false
+                    }
+
+                    else -> {
+                        val clean = selected.removeSuffix("s").trim()
+                        val value = clean.toFloatOrNull()
+
+                        if (value != null) {
+                            averaging_period = value
+                            is_no_set = FALSE
+                            isAutoModeEnabled = false
+                        } else {
+                            isAutoModeEnabled = true
+                        }
+                    }
+                }
+
+                tick_stop = 0UL
+
+                Log.w("MAIN", "averaging_period = $averaging_period, is_no_set = $is_no_set")
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>) {}
+        }
+
+        var accuracySpinnerInitialized = false
+        accuracyOptionsSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+                if (!accuracySpinnerInitialized) {
+                    accuracySpinnerInitialized = true
+                    return
+                }
+
+                val selected = parent.getItemAtPosition(position).toString().trim()
+                val value = selected.toUIntOrNull()
+                if (value != null) {
+                    gauge.accuracy = value
+                    Log.d("MAIN", "accuracy = $value")
+                }
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>) {}
+        }
+
+        unitSwitch.setOnCheckedChangeListener { _, isChecked ->
+            gauge.displayUnit = if (isChecked)
+                FrequencyGaugeView.DisplayUnit.RENTGEN
+            else
+                FrequencyGaugeView.DisplayUnit.HERTZ
+        }
 
         FrequencyLogger.init(this)
         LospDevVariables.lospDev = LospDev(this)
         LospDevVariables.log = ::log
-
-        dataInput.addTextChangedListener(object : android.text.TextWatcher {
-            private var previous = ""
-            private var isFormatting = false
-            private var deleting = false
-            private var deleteIndex = 0
-
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
-                previous = s.toString()
-                deleting = count > after
-                deleteIndex = start
-            }
-
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-
-            override fun afterTextChanged(s: android.text.Editable?) {
-                if (isFormatting || s == null) return
-
-                val currentRaw = s.toString()
-                val clean = currentRaw.replace(" ", "")
-                    .uppercase()
-                    .filter { it in "0123456789ABCDEF" }
-
-                if (clean == previous.replace(" ", "").uppercase()) return
-
-                isFormatting = true
-
-                // Handle deletion: remove last hex char with its space if needed
-                var adjustedClean = clean
-                if (deleting && deleteIndex > 0 && previous.getOrNull(deleteIndex - 1) == ' ') {
-                    val realIndex = deleteIndex - 2
-                    if (realIndex >= 0 && realIndex < adjustedClean.length) {
-                        adjustedClean = adjustedClean.removeRange(realIndex, realIndex + 1)
-                    }
-                }
-
-                // Format as hex pairs with space
-                val formatted = buildString {
-                    for (i in adjustedClean.indices) {
-                        append(adjustedClean[i])
-                        if (i % 2 == 1 && i != adjustedClean.length - 1) append(' ')
-                    }
-                }
-
-                // Set cursor position
-                val newCursor = formatted.length.coerceAtMost(formatted.length)
-
-                dataInput.setText(formatted)
-                dataInput.setSelection(newCursor)
-
-                isFormatting = false
-            }
-        })
+        LospDevVariables.blink_log = ::blink_log
 
         // Register USB permission receiver
         val filter = IntentFilter(ACTION_USB_PERMISSION)
@@ -227,350 +375,93 @@ class MainActivity : AppCompatActivity() {
         }
         registerReceiver(usbReceiver, filter, RECEIVER_NOT_EXPORTED)
 
-
-        toggleButton.setOnClickListener {
-            expanded = !expanded
-            toggleContainer.visibility = if (expanded) View.VISIBLE else View.GONE
-            toggleButton.animate().rotation(if (expanded) 180f else 0f).setDuration(250).start()
-        }
-
-        // Read button click: attempts to read one sector from the USB device and display it in hex.
-        readBtn.setOnClickListener {
-            val usbAccess = UsbSectorAccess(this)
-
-            if (!usbAccess.connect()) {
-                log("Failed to connect to USB device")
-                return@setOnClickListener
+        val detachFilter = IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        registerReceiver(object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val device: UsbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE) ?: return
+                usbConnected = false
+                frecJob?.cancel()
+                usbOverlay.visibility = View.VISIBLE
+                mainContent.visibility = View.GONE
+                log("Устройство отключено: ${device.deviceName}")
             }
+        }, detachFilter)
+    }
 
-            val sector = sectorInput.text.toString().toLongOrNull()
-            if (sector == null) {
-                log("Invalid sector number")
-                usbAccess.close()
-                return@setOnClickListener
-            }
-
-            if (!usbAccess.readCapacity()) {
-                log("Failed to read device capacity")
-                usbAccess.close()
-                return@setOnClickListener
-            }
-
-            val data = usbAccess.readSectors(sector, 1)
-            if (data != null) {
-                val output = if (detailSwitch.isChecked) {
-                    formatSectorAsHexAscii(data)
-                } else {
-                    data.joinToString(" ") { "%02X".format(it) }
-                }
-                log("Read from sector $sector:\n$output")
-            } else {
-                log("Read failed for sector $sector")
-
-                val sense = usbAccess.requestSense()
-                if (sense != null) {
-                    val senseStr = sense.joinToString(" ") { "%02X".format(it) }
-                    log("REQUEST SENSE: $senseStr")
-                } else {
-                    log("REQUEST SENSE failed")
-                }
-            }
-
-            usbAccess.close()
-        }
-
-        // Write button click: writes user-entered UTF-8 text to the specified sector on the USB device.
-        writeBtn.setOnClickListener {
-            val usbAccess = UsbSectorAccess(this)
-
-            if (!usbAccess.connect()) {
-                log("Failed to connect to USB device")
-                return@setOnClickListener
-            }
-
-            val sector = sectorInput.text.toString().toLongOrNull()
-            val hexInput = dataInput.text.toString()
-
-            if (sector == null || hexInput.isBlank()) {
-                log("Invalid sector number or data")
-                usbAccess.close()
-                return@setOnClickListener
-            }
-
-            val inputBytes = parseHexInput(hexInput)
-            if (inputBytes == null) {
-                log("Invalid hex format. Use format: 00 1A FF ...")
-                usbAccess.close()
-                return@setOnClickListener
-            }
-
-            if (!usbAccess.readCapacity()) {
-                log("Failed to read device capacity")
-                usbAccess.close()
-                return@setOnClickListener
-            }
-
-            val blockSize = usbAccess.blockSize
-            val dataToWrite = ByteArray(blockSize) { 0 }
-            System.arraycopy(inputBytes, 0, dataToWrite, 0, minOf(inputBytes.size, blockSize))
-
-            val success = usbAccess.writeSectors(sector, dataToWrite)
-            if (success) {
-                log("Successfully wrote to sector $sector:\n$hexInput")
-            } else {
-                log("Failed to write to sector $sector")
-                val sense = usbAccess.requestSense()
-                if (sense != null) {
-                    val senseStr = sense.joinToString(" ") { "%02X".format(it) }
-                    log("REQUEST SENSE: $senseStr")
-                } else {
-                    log("REQUEST SENSE failed")
-                }
-            }
-
-            usbAccess.close()
-        }
-
-        // Clear button click: overwrites the specified sector with zero bytes.
-        clearBtn.setOnClickListener {
-            val usbAccess = UsbSectorAccess(this)
-
-            if (!usbAccess.connect()) {
-                log("Failed to connect to USB device")
-                return@setOnClickListener
-            }
-
-            val sector = sectorInput.text.toString().toLongOrNull()
-            if (sector == null) {
-                log("Invalid sector number")
-                usbAccess.close()
-                return@setOnClickListener
-            }
-
-            if (!usbAccess.readCapacity()) {
-                log("Failed to read device capacity")
-                usbAccess.close()
-                return@setOnClickListener
-            }
-
-            val blockSize = usbAccess.blockSize
-            val zeroData = ByteArray(blockSize) { 0 }
-
-            val success = usbAccess.writeSectors(sector, zeroData)
-            if (success) {
-                log("Successfully cleared sector $sector")
-            } else {
-                log("Failed to clear sector $sector")
-                val sense = usbAccess.requestSense()
-                if (sense != null) {
-                    val senseStr = sense.joinToString(" ") { "%02X".format(it) }
-                    log("REQUEST SENSE: $senseStr")
-                } else {
-                    log("REQUEST SENSE failed")
-                }
-            }
-
-            usbAccess.close()
-        }
-
-        // Scan button click: lists all connected USB devices and requests permission if needed.
-        scanBtn.setOnClickListener {
-            val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-            val deviceList = usbManager.deviceList
-
-            if (deviceList.isEmpty()) {
-                log("No USB devices found.")
-            } else {
-                log("Detected ${deviceList.size} USB device(s).\n")
-
-                for ((_, device) in deviceList) {
-                    val hasPermission = usbManager.hasPermission(device)
-
-                    if (!hasPermission) {
-                        val permissionIntent = PendingIntent.getBroadcast(
-                            this,
-                            0,
-                            Intent("android.hardware.usb.action.USB_PERMISSION"),
-                            PendingIntent.FLAG_IMMUTABLE
-                        )
-                        usbManager.requestPermission(device, permissionIntent)
-                        log("Requested permission for ${device.deviceName}")
-                    }
-
-                    val info = StringBuilder()
-                    info.appendLine("Device: ${device.deviceName}")
-                    info.appendLine("  Vendor ID      : ${device.vendorId}")
-                    info.appendLine("  Product ID     : ${device.productId}")
-                    info.appendLine("  Class          : ${device.deviceClass}")
-                    info.appendLine("  Subclass       : ${device.deviceSubclass}")
-                    info.appendLine("  Protocol       : ${device.deviceProtocol}")
-                    info.appendLine("  Manufacturer   : ${device.manufacturerName ?: "Unknown"}")
-                    info.appendLine("  Product Name   : ${device.productName ?: "Unknown"}")
-                    info.appendLine("  Serial Number  : ${device.serialNumber ?: "Unknown"}")
-                    info.appendLine("  Version        : ${device.version ?: "Unknown"}")
-                    info.appendLine("  Configuration Count: ${device.configurationCount}")
-
-                    // Trying to retrieve maxLBA if possible
-                    val usbAccess = UsbSectorAccess(this)
-                    if (usbAccess.connect()) {
-                        val maxLBA = usbAccess.maxLBA
-                        val blockSize = usbAccess.blockSize
-                        if (maxLBA > 0) {
-                            info.appendLine("  LBA        : $maxLBA sectors")
-                            info.appendLine("  Sector size: $blockSize b")
-                            info.appendLine("  Size       : ${formatSize(maxLBA * blockSize)}")
-                        } else {
-                            info.appendLine("  LBA        : Not permitted or not available")
-                            info.appendLine("  Sector size: Not permitted or not available")
-                            info.appendLine("  Size       : Not permitted or not available")
+    private fun startFrequencyLoop() {
+        frecJob?.cancel()
+        frecJob = lifecycleScope.launch {
+            while (isActive && usbConnected) {
+                withContext(Dispatchers.IO) {
+                    try {
+                        if(isAutoModeEnabled)
+                        {
+                            frec_tracking(lospDev, LospDevVariables.log)
+//                            frec_tracking(lospDev, LospDevVariables.blink_log)
                         }
-                        usbAccess.close()
-                    } else {
-                        info.appendLine("  LBA        : Not permitted")
-                        info.appendLine("  Sector size: Not permitted")
-                        info.appendLine("  Size       : Not permitted")
-                    }
-
-                    for (i in 0 until device.configurationCount) {
-                        val config = device.getConfiguration(i)
-                        info.appendLine("    Configuration $i:")
-                        for (j in 0 until config.interfaceCount) {
-                            val intf = config.getInterface(j)
-                            info.appendLine("      Interface $j: class=${intf.interfaceClass}, subclass=${intf.interfaceSubclass}, protocol=${intf.interfaceProtocol}")
-                        }
-                    }
-                    log(info.toString())
-                }
-            }
-        }
-
-        overwriteBtn.setOnClickListener {
-            val usbAccess = UsbSectorAccess(this)
-            val lba = sectorInput.text.toString().toLongOrNull()
-            val offset = offsetInput.text.toString().toIntOrNull()
-            val dataHex = dataInput.text.toString().replace(" ", "")
-
-            if (!usbAccess.connect()) {
-                log("Failed to connect to USB device")
-                return@setOnClickListener
-            }
-
-            if (lba == null || offset == null) {
-                logText.append("\nInvalid sector number or offset")
-                return@setOnClickListener
-            }
-
-            val dataBytes = hexStringToByteArray(dataHex)
-            if (dataBytes == null) {
-                logText.append("\nInvalid hex data format")
-                return@setOnClickListener
-            }
-
-            if (!usbAccess.readCapacity()) {
-                log("Failed to read device capacity")
-                usbAccess.close()
-                return@setOnClickListener
-            }
-
-            val result = usbAccess.overwriteSectorBytes(lba, offset, dataBytes)
-            result.fold(
-                onSuccess = {
-                    logText.append("\nOverwrite successful at LBA=$lba, offset=$offset")
-                },
-                onFailure = {
-                    logText.append("\nOverwrite failed at LBA=$lba, offset=$offset: ${it.message}")
-                }
-            )
-        }
-
-        echoButton.setOnClickListener {
-            if (measureJob == null || measureJob?.isActive == false) {
-                measureJob = scope.launch {
-                    isRunMeasurment = true
-                    while (isRunMeasurment) {
-                        val frequency = withContext(Dispatchers.IO) {
-                            getFrec()
+                        else
+                        {
+                            frec_exec(lospDev, LospDevVariables.log, isStopFrecExecMeasurment)
                         }
 
-                        withContext(Dispatchers.Main) {
-                            logText.text = "Частота: $frequency Гц"
-                        }
-
-                        delay(1000)
-                    }
+                    } catch (_: Exception) { }
                 }
-            }
-        }
 
-        stopMeasureButton.setOnClickListener {
-            isRunMeasurment = false
-        }
+                var freq: Float = 0f
+                var err: Float? = 0f
 
-        testMeasureButton.setOnClickListener{
-            LospDevVariables.getFrecTest()
-        }
-
-        btnMeasureExec.setOnClickListener{
-            isStopFrecExecMeasurment = false
-            LospDevVariables.getFrecExec()
-        }
-
-        btnMeasureExecStop.setOnClickListener{
-            isStopFrecExecMeasurment = true
-            LospDevVariables.getFrecExec()
-//            FrequencyLogger.getCurrentLogFile()?.let { openLogFile(this, it) } TODO
-        }
-
-        graphButton.setOnClickListener {
-            val intent = Intent(this, GraphActivity::class.java)
-            startActivity(intent)
-        }
-
-        ClearLog.setOnClickListener {
-            logText.text = ""
-        }
-
-        readBytesBtn.setOnClickListener {
-            val usbAccess = UsbSectorAccess(this)
-
-            if (!usbAccess.connect()) {
-                log("Failed to connect to USB device")
-                return@setOnClickListener
-            }
-
-            val sector = sectorInput.text.toString().toLongOrNull()
-            val offset = offsetInput.text.toString().toIntOrNull()
-            val length = lengthInput.text.toString().toIntOrNull()
-
-            if (sector == null || offset == null || length == null || length <= 0) {
-                log("Invalid input for sector, offset or length")
-                usbAccess.close()
-                return@setOnClickListener
-            }
-
-            if (!usbAccess.readCapacity()) {
-                log("Failed to read device capacity")
-                usbAccess.close()
-                return@setOnClickListener
-            }
-
-            val result = usbAccess.readSectorBytes(sector, offset, length)
-            if (result != null) {
-                val output = if (detailSwitch.isChecked) {
-                    formatSectorAsHexAscii(result)
-                } else {
-                    result.joinToString(" ") { "%02X".format(it) }
+                if(isAutoModeEnabled)
+                {
+                    freq = 1f / tracking_period_av1.toFloat()
+                    err = (1f / sqrt(tracking_m_sum.toFloat())) / tracking_period_av1.toFloat()
                 }
-                log("Read from sector $sector:\n$output")
+                else
+                {
+                    freq = frec_old.toFloat()
+                    err = if (period_acc_old.toInt() == 0) null
+                    else if (accuracy.toFloat() < 1e-99) freq * period_acc_old.toFloat() / 100f
+                    else period_acc_old.toFloat()
+                }
+
+
+                gauge.frequency = freq
+                gauge.error = err
+
+                delay(100)
+            }
+        }
+    }
+
+    private fun setupTripleClickToToggleLogs() {
+        val headerText = findViewById<TextView>(R.id.headerText)
+        val logControlContainer = findViewById<View>(R.id.logControlContainer)
+        val logTextView = findViewById<View>(R.id.logTextView)
+
+        headerText.setOnClickListener {
+            val now = System.currentTimeMillis()
+            if (now - lastClickTime <= tripleClickInterval) {
+                clickCount++
             } else {
-                log("Read failed")
-                val sense = usbAccess.requestSense()
-                if (sense != null) {
-                    log("REQUEST SENSE: ${sense.joinToString(" ") { "%02X".format(it) }}")
-                }
+                clickCount = 1
             }
+            lastClickTime = now
 
-            usbAccess.close()
+            if (clickCount == 3) {
+                val newVisibility =
+                    if (logControlContainer.isVisible)
+                    {
+                        isLogVisible = false
+                        View.GONE
+                    }
+                    else
+                    {
+                        isLogVisible = true
+                        View.VISIBLE
+                    }
+                logControlContainer.visibility = newVisibility
+                logTextView.visibility = newVisibility
+                clickCount = 0
+            }
         }
     }
 
@@ -580,14 +471,27 @@ class MainActivity : AppCompatActivity() {
      * @param message The message string to display in the log area.
      */
     @SuppressLint("SetTextI18n")
+    private fun blink_log(message: String) {
+//        showBlinkingText(message)
+//        blinkingText.text = message
+    }
+
+    /**
+     * Logs the provided message to the on-screen text view with a newline.
+     *
+     * @param message The message string to display in the log area.
+     */
+    @SuppressLint("SetTextI18n")
     private fun log(message: String) {
-        if(clearOutSwitch.isChecked)
-        {
-            logText.text = "$message\n"
-        }
-        else
-        {
-            logText.append("$message\n")
+        runOnUiThread {
+            if(isLogVisible)
+            {
+                if (clearLogSwitch.isChecked) {
+                    logTextView.text = message
+                } else {
+                    logTextView.append("\n$message")
+                }
+            }
         }
     }
 
@@ -733,17 +637,5 @@ class MainActivity : AppCompatActivity() {
             log("EchoTest: Ошибка при echoTest: ${e.message}")
             return false
         }
-    }
-
-    fun getFrec() : Any
-    {
-        val freq = frecUc(1, LospDevVariables.lospDev, ::log)
-
-        if(freq >= 0.0)
-        {
-            return freq
-        }
-
-        return -1
     }
 }

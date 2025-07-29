@@ -1,259 +1,175 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootFrame"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@android:color/white">
+    android:layout_height="match_parent">
 
-    <LinearLayout
-        android:orientation="vertical"
-        android:padding="20dp"
+    <ScrollView
+        android:id="@+id/mainContent"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_horizontal">
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:background="@android:color/white">
 
-        <TextView
-            android:text="USB Sector Tool"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:textColor="@android:color/black"
-            android:layout_marginBottom="16dp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-            
-        <ImageButton
-            android:id="@+id/toggleButton"
-            android:layout_width="wrap_content"
+        <androidx.constraintlayout.widget.ConstraintLayout
+            xmlns:app="http://schemas.android.com/apk/res-auto"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:src="@drawable/ic_arrow_down"
-            android:contentDescription="Toggle inputs"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:layout_gravity="center_horizontal"
-            android:rotation="0"
-            android:layout_marginBottom="8dp"/>
+            android:padding="16dp">
 
-        <LinearLayout
-                    android:id="@+id/toggleContainer"
-                    android:orientation="vertical"
-                    android:layout_width="match_parent"
+            <TextView
+                android:id="@+id/headerText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:text="Radiation meter for Mikhail Ilyich"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="@android:color/black"
+                android:layout_marginBottom="16dp"
+                android:gravity="center"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <LinearLayout
+                android:id="@+id/spinnerContainer"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginBottom="16dp"
+                app:layout_constraintTop_toBottomOf="@id/headerText"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <Spinner
+                    android:id="@+id/frequencyOptionsSpinner"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:visibility="gone">
-                    <EditText
-                    android:id="@+id/sectorInput"
-                    android:hint="Sector number (min 0)"
-                    android:inputType="number"
-                    android:layout_width="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp" />
+
+                <Spinner
+                    android:id="@+id/accuracyOptionsSpinner"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp"/>
-                    
-                    <EditText
-                    android:id="@+id/offsetInput"
-                    android:hint="Offset (in bytes)"
-                    android:inputType="number"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp"/>
-                    
-                    <EditText
-                    android:id="@+id/lengthInput"
-                    android:hint="Length (in bytes)"
-                    android:inputType="number"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp"/>
-                    
-                    <EditText
-                    android:id="@+id/dataInput"
-                    android:hint="Data to write (hex: e.g. 01 A4 3F)"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp"
-                    android:minLines="2"
-                    android:maxLines="4"
-                    android:gravity="top|start"/>
-                    
-                    <Switch
-                    android:id="@+id/detailSwitch"
-                    android:text="Расширенный вывод"
-                    android:checked="true"
-                    android:layout_marginBottom="16dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <com.example.usb_sector_rw.FrequencyGaugeView
+                android:id="@+id/frequencyGauge"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_marginTop="16dp"
+                app:layout_constraintTop_toBottomOf="@id/spinnerContainer"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintDimensionRatio="1:1"
+                app:layout_constraintWidth_default="percent"
+                app:layout_constraintHeight_default="percent"
+                app:layout_constraintWidth_percent="0.8"
+                app:layout_constraintHeight_percent="0.6" />
+
+            <LinearLayout
+                android:id="@+id/unitSwitchContainer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                app:layout_constraintTop_toBottomOf="@id/frequencyGauge"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <TextView
+                    android:id="@+id/labelHertz"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"/>
-                    
-                    <LinearLayout
-                        android:orientation="horizontal"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center"
-                        android:layout_marginBottom="12dp">
-                        
-                        <Button
-                        android:id="@+id/readBtn"
-                        android:text="Чтение сектора"
-                        android:layout_weight="1"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"/>
-                        
-                        <Button
-                        android:id="@+id/writeBtn"
-                        android:text="Запись сектора"
-                        android:layout_weight="1"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="6dp"/>
-                    </LinearLayout>
-                    
-                    <LinearLayout
-                        android:orientation="horizontal"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center"
-                        android:layout_marginBottom="12dp">
-                        
-                        <Button
-                        android:id="@+id/overwriteBtn"
-                        android:text="Перезаписать байты"
-                        android:layout_weight="1"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"/>
-                        
-                        <Button
-                        android:id="@+id/readBytesBtn"
-                        android:text="Читать байты"
-                        android:layout_weight="1"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="6dp"/>
-                    </LinearLayout>
-                    
-                    <LinearLayout
-                        android:orientation="horizontal"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center"
-                        android:layout_marginBottom="12dp">
-                        
-                        <Button
-                        android:id="@+id/clearBtn"
-                        android:text="Очистить сектор"
-                        android:layout_weight="1"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"/>
-                        
-                        <Button
-                        android:id="@+id/scanBtn"
-                        android:text="Сканировать USB"
-                        android:layout_weight="1"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="6dp"/>
-                        
-                    </LinearLayout>
-        </LinearLayout>
-        <LinearLayout
-            android:orientation="horizontal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:layout_marginBottom="12dp">
-            <Button
-                android:id="@+id/btnMeasureTest"
-                android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Герцы"
+                    android:paddingEnd="8dp" />
+
+                <Switch
+                    android:id="@+id/unitSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    android:id="@+id/labelRentgen"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Рентгены"
+                    android:paddingStart="8dp" />
+            </LinearLayout>
+            
+            <!-- Лог и переключатель очистки -->
+            <LinearLayout
+                android:id="@+id/logControlContainer"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Тест непрерывности измерений"
-                android:layout_marginTop="8dp"
-            />
-        </LinearLayout>
-        
-        <LinearLayout
-            android:orientation="horizontal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:layout_marginBottom="12dp">
-            <Button
-                android:id="@+id/btnMeasureExec"
-                android:layout_width="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="16dp"
+                app:layout_constraintTop_toBottomOf="@id/unitSwitchContainer"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <TextView
+                    android:id="@+id/clearLogLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Очищать лог"
+                    android:paddingEnd="8dp" />
+
+                <Switch
+                    android:id="@+id/clearLogSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/logTextView"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Частота + файл"
+                android:text=""
+                android:padding="8dp"
+                android:background="#EEEEEE"
+                android:textColor="@android:color/black"
+                android:textIsSelectable="true"
+                android:maxLines="500"
+                android:scrollbars="vertical"
                 android:layout_marginTop="8dp"
-            />
-            <Button
-            android:id="@+id/btnMeasureExecStop"
+                app:layout_constraintTop_toBottomOf="@id/logControlContainer"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </ScrollView>
+
+    <!-- Overlay for USB prompt -->
+    <LinearLayout
+        android:id="@+id/usbOverlay"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:background="#CCFFFFFF"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="24dp"
+        android:visibility="visible">
+
+        <TextView
+            android:id="@+id/usbPromptText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Остановка записи"
-            android:layout_marginTop="8dp"
-            />
-        </LinearLayout>
-        <LinearLayout
-            android:orientation="horizontal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:layout_marginBottom="12dp">
-            <Button
-                android:id="@+id/graphButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Открыть график"
-                android:layout_marginTop="16dp"/>
-        </LinearLayout>
-        <LinearLayout
-            android:orientation="horizontal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:layout_marginTop="6dp">
-            <Button
-                android:id="@+id/ClearLog"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Очистить лог"
-                android:layout_marginTop="8dp"
-                />
-            <Switch
-                android:id="@+id/clearOutSwitch"
-                android:text="Авто-чистка вывода"
-                android:checked="true"
-                android:layout_marginTop="6dp"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"/>
-        </LinearLayout>
-        <LinearLayout
-            android:orientation="horizontal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:layout_marginBottom="12dp">
-            <Button
-                android:id="@+id/btnEchoTest"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Запуск измерения"
-                android:layout_marginTop="8dp"
-            />
-            <Button
-                android:id="@+id/btnStopMeasure"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Стоп измерения"
-                android:layout_marginTop="8dp"
-            />
-        </LinearLayout>
-        
-        <TextView
-            android:id="@+id/logText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Лог будет здесь..."
+            android:text="Пожалуйста, подключите USB-устройство"
+            android:textSize="20sp"
             android:textColor="@android:color/black"
-            android:textSize="14sp"
-            android:paddingTop="16dp"
-            android:background="#EEEEEE"
-            android:padding="12dp"
-            android:textIsSelectable="true"/>
+            android:layout_marginBottom="20dp" />
+
+        <Button
+            android:id="@+id/usbConfirmButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Подключено" />
     </LinearLayout>
-</ScrollView>
+</FrameLayout>

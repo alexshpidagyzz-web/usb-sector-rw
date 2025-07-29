@@ -29,6 +29,12 @@ class CustomGraphView @JvmOverloads constructor(
         isAntiAlias = true
     }
 
+    var isVertical: Boolean = true
+        set(value) {
+            field = value
+            invalidate()
+        }
+
     private var minX = Long.MAX_VALUE
     private var maxX = Long.MIN_VALUE
     private var minY = Float.MAX_VALUE
@@ -81,33 +87,52 @@ class CustomGraphView @JvmOverloads constructor(
         super.onDraw(canvas)
         if (points.size < 2) return
 
-        val internalPaddingX = width * 0.07f
-        val internalPaddingY = height * 0.07f
-        val graphWidth = width - 2 * internalPaddingX
-        val graphHeight = height - 2 * internalPaddingY
+        val paddingX = width * 0.07f
+        val paddingY = height * 0.07f
+        val graphWidth = width - 2 * paddingX
+        val graphHeight = height - 2 * paddingY
 
-        val scaleX = graphWidth / (maxX - minX).toFloat()
-        val scaleY = graphHeight / (maxY - minY)
+        val timeSpan = (maxX - minX).toFloat()
+        val valueSpan = (maxY - minY)
 
         val step = max(1, points.size / (width / 5))
-        for (i in step until points.size step step) {
-            val (prevX, prevY) = points[i - step]
-            val (currX, currY) = points[i]
 
-            val x1 = internalPaddingX + (prevX - minX) * scaleX
-            val y1 = height - internalPaddingY - (prevY - minY) * scaleY
-            val x2 = internalPaddingX + (currX - minX) * scaleX
-            val y2 = height - internalPaddingY - (currY - minY) * scaleY
+        for (i in step until points.size step step) {
+            val (prevTime, prevValue) = points[i - step]
+            val (currTime, currValue) = points[i]
+
+            val (x1, y1, x2, y2) = if (isVertical) {
+                val x1 = paddingX + ((prevTime - minX) / timeSpan) * graphWidth
+                val y1 = height - paddingY - ((prevValue - minY) / valueSpan) * graphHeight
+                val x2 = paddingX + ((currTime - minX) / timeSpan) * graphWidth
+                val y2 = height - paddingY - ((currValue - minY) / valueSpan) * graphHeight
+                arrayOf(x1, y1, x2, y2)
+            } else {
+                val x1 = paddingX + ((prevValue - minY) / valueSpan) * graphWidth
+                val y1 = height - paddingY - ((prevTime - minX) / timeSpan) * graphHeight
+                val x2 = paddingX + ((currValue - minY) / valueSpan) * graphWidth
+                val y2 = height - paddingY - ((currTime - minX) / timeSpan) * graphHeight
+                arrayOf(x1, y1, x2, y2)
+            }
 
             canvas.drawLine(x1, y1, x2, y2, paint)
         }
 
-        // Подпись осей
+        // Оси и подписи
+        if (isVertical) {
+            drawVerticalAxes(canvas, paddingX, paddingY, graphWidth, graphHeight)
+        } else {
+            drawHorizontalAxes(canvas, paddingX, paddingY, graphWidth, graphHeight)
+        }
+    }
+
+    private fun drawVerticalAxes(canvas: Canvas, paddingX: Float, paddingY: Float, graphWidth: Float, graphHeight: Float) {
+        // Подпись оси X — время
         val axisLabel = "Время"
         val axisLabelWidth = axisPaint.measureText(axisLabel)
         canvas.drawText(
             axisLabel,
-            width - internalPaddingX - axisLabelWidth,
+            width - paddingX - axisLabelWidth,
             height.toFloat() - 10f,
             axisPaint
         )
@@ -117,26 +142,59 @@ class CustomGraphView @JvmOverloads constructor(
         canvas.drawText("Значение", 20f, height / 2f, axisPaint)
         canvas.restore()
 
-        // Подписи времени
         val labelStep = max(1, points.size / 5)
         for (i in points.indices step labelStep) {
             val (time, _) = points[i]
-            val x = internalPaddingX + (time - minX) * scaleX
+            val x = paddingX + ((time - minX).toFloat() / (maxX - minX)) * graphWidth
             val label = timeFormat.format(Date(time))
-
             val textWidth = axisPaint.measureText(label)
             canvas.save()
-            canvas.rotate(-75f, x, height - internalPaddingY + 10f)
-            canvas.drawText(label, x - textWidth, height - internalPaddingY + 10f, axisPaint)
+            canvas.rotate(-75f, x, height - paddingY + 10f)
+            canvas.drawText(label, x - textWidth / 2, height - paddingY + 10f, axisPaint)
             canvas.restore()
         }
 
-        // Подписи по оси Y
         val yStep = (maxY - minY) / 4
         for (i in 0..4) {
             val value = minY + i * yStep
-            val y = height - internalPaddingY - (value - minY) * scaleY
+            val y = height - paddingY - ((value - minY) / (maxY - minY)) * graphHeight
             canvas.drawText(String.format("%.2f", value), 10f, y + 10f, axisPaint)
+        }
+    }
+
+    private fun drawHorizontalAxes(canvas: Canvas, paddingX: Float, paddingY: Float, graphWidth: Float, graphHeight: Float) {
+        // Подпись оси X — значение
+        val axisLabel = "Значение"
+        val axisLabelWidth = axisPaint.measureText(axisLabel)
+        canvas.drawText(
+            axisLabel,
+            width - paddingX - axisLabelWidth,
+            height.toFloat() - 10f,
+            axisPaint
+        )
+
+        canvas.save()
+        canvas.rotate(-90f, 20f, height / 2f)
+        canvas.drawText("Время", 20f, height / 2f, axisPaint)
+        canvas.restore()
+
+        val labelStep = max(1, points.size / 5)
+        for (i in points.indices step labelStep) {
+            val (time, _) = points[i]
+            val y = height - paddingY - ((time - minX).toFloat() / (maxX - minX)) * graphHeight
+            val label = timeFormat.format(Date(time))
+            val textWidth = axisPaint.measureText(label)
+            canvas.save()
+            canvas.rotate(-75f, paddingX - 5f, y)
+            canvas.drawText(label, paddingX - textWidth - 10f, y + 10f, axisPaint)
+            canvas.restore()
+        }
+
+        val xStep = (maxY - minY) / 4
+        for (i in 0..4) {
+            val value = minY + i * xStep
+            val x = paddingX + ((value - minY) / (maxY - minY)) * graphWidth
+            canvas.drawText(String.format("%.2f", value), x - 20f, height - 5f, axisPaint)
         }
     }
 }
