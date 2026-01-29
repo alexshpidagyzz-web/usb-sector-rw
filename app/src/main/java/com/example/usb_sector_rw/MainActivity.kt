@@ -1,6 +1,13 @@
 package com.example.usb_sector_rw
 
-import FrequencyLogger
+import com.example.usb_sector_rw.msd.LospDev
+import com.example.usb_sector_rw.msd.temp_exec
+import com.example.usb_sector_rw.msd.temp_test
+import com.example.usb_sector_rw.msd.uv_exec
+import com.example.usb_sector_rw.msd.uv_test
+import com.example.usb_sector_rw.msd.set_uv_range
+
+import com.example.usb_sector_rw.losp.FALSE
 import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
 import android.app.PendingIntent
@@ -29,15 +36,7 @@ import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.example.usb_sector_rw.LospDevVariables.isStopFrecExecMeasurment
-import com.example.usb_sector_rw.LospDevVariables.lospDev
-import com.example.usb_sector_rw.losp.FALSE
-import com.example.usb_sector_rw.msd.LospDev
-import com.example.usb_sector_rw.msd.set_uv_range
-import com.example.usb_sector_rw.msd.temp_exec
-import com.example.usb_sector_rw.msd.temp_test
-import com.example.usb_sector_rw.msd.uv_exec
-import com.example.usb_sector_rw.msd.uv_test
+import com.example.usb_sector_rw.history.HistoryActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -46,11 +45,26 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.random.Random
 import kotlinx.coroutines.isActive
 import java.lang.Boolean.TRUE
 import kotlin.math.sqrt
+import kotlinx.coroutines.isActive
 import androidx.core.view.isVisible
+import kotlin.random.Random
+
+// Добавьте эти импорты для работы с локацией
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.example.usb_sector_rw.LospDevVariables.lospDev
+import com.google.android.gms.location.*
+
+// Импорты для мок-данных
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlin.math.sin
+import kotlin.math.cos
 
 
 object LospDevVariables {
@@ -123,6 +137,64 @@ object LospDevVariables {
 
 }
 
+// Простой менеджер мок-данных
+object MockDataManager {
+    private var isMockMode = false
+    private var mockCounter = 0
+
+    fun enableMockMode() {
+        isMockMode = true
+        mockCounter = 0
+    }
+
+    fun disableMockMode() {
+        isMockMode = false
+    }
+
+    fun isInMockMode(): Boolean = isMockMode
+
+    // Генерация тестовой частоты
+    fun getMockFrequency(): Float {
+        val base = 50f
+        val variation = sin(mockCounter * 0.1).toFloat() * 20f
+        mockCounter++
+        return base + variation
+    }
+
+    // Генерация тестовой дозы
+    fun getMockDose(): Float {
+        return 0.1f + (sin(mockCounter * 0.05).toFloat() * 0.2f)
+    }
+
+    // Генерация тестовой температуры
+    fun getMockTemperature(): Float {
+        return 20f + (cos(mockCounter * 0.07).toFloat() * 10f)
+    }
+
+    // Генерация тестового УФ
+    fun getMockUv(): Float {
+        return 0.01f + (sin(mockCounter * 0.03).toFloat() * 0.04f)
+    }
+
+    // Получение всех данных сразу
+    data class MeasurementData(
+        val frequency: Float,
+        val dose: Float,
+        val temperature: Float,
+        val uv: Float,
+        val timestamp: Long = System.currentTimeMillis()
+    )
+
+    fun getMockMeasurement(): MeasurementData {
+        return MeasurementData(
+            frequency = getMockFrequency(),
+            dose = getMockDose(),
+            temperature = getMockTemperature(),
+            uv = getMockUv()
+        )
+    }
+}
+
 /**
  * MainActivity provides a user interface for reading and writing raw sectors
  * to a USB Mass Storage device connected via Android's USB Host API.
@@ -174,6 +246,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var logTextView: TextView
     private lateinit var clearLogSwitch: Switch
 
+    // Добавьте кнопку для открытия карты
+    private lateinit var btnOpenMap: Button
+
+    // НОВАЯ КНОПКА ДЛЯ ИСТОРИИ
+    private lateinit var btnOpenHistory: Button
+
+    // КНОПКА ДЛЯ РЕЖИМА ОТЛАДКИ
+    private lateinit var btnDebugMode: Button
+
     private var usbConnected = false
     private var isAutoModeEnabled = false
     private var frecJob: Job? = null
@@ -184,6 +265,7 @@ class MainActivity : AppCompatActivity() {
     private var isLogVisible = false
     private var blinkingAnimator: ObjectAnimator? = null
     private var blinkingResetJob: Job? = null
+    private var isStopFrecExecMeasurment = false
 
     var expanded = false
 
@@ -220,12 +302,53 @@ class MainActivity : AppCompatActivity() {
         logTextView = findViewById(R.id.logTextView)
         clearLogSwitch = findViewById(R.id.clearLogSwitch)
 
+        // Инициализируем кнопку для карты
+        btnOpenMap = findViewById(R.id.btnOpenMap)
+
+        // ИНИЦИАЛИЗИРУЕМ КНОПКУ ИСТОРИИ
+        btnOpenHistory = findViewById(R.id.btnOpenHistory)
+
+        // ИНИЦИАЛИЗИРУЕМ КНОПКУ РЕЖИМА ОТЛАДКИ
+        btnDebugMode = findViewById(R.id.btnDebugMode)
 
         val logControlContainer = findViewById<View>(R.id.logControlContainer)
 
         clearLogSwitch.isChecked = true
         logControlContainer.visibility = View.GONE
         logTextView.visibility = View.GONE
+
+        // Настраиваем обработчик для кнопки карты
+        btnOpenMap.setOnClickListener {
+            // Проверяем разрешения перед открытием карты
+            if (checkLocationPermissions()) {
+                val intent = Intent(this, MapActivity::class.java)
+                startActivity(intent)
+            } else {
+                requestLocationPermissions()
+            }
+        }
+
+        // НАСТРАИВАЕМ ОБРАБОТЧИК ДЛЯ КНОПКИ ИСТОРИИ
+        btnOpenHistory.setOnClickListener {
+            println("DEBUG: Кнопка 'История' нажата")
+
+            // Простая версия для тестирования
+            try {
+                val intent = Intent(this, HistoryActivity::class.java)
+                startActivity(intent)
+                Toast.makeText(this, "Открываю историю...", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        // НАСТРАИВАЕМ ОБРАБОТЧИК ДЛЯ КНОПКИ РЕЖИМА ОТЛАДКИ
+        btnDebugMode.setOnClickListener {
+            enableDebugMode()
+        }
+
+        btnOpenMap.visibility = View.GONE
+        btnOpenHistory.visibility = View.GONE
 
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, options)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -239,16 +362,19 @@ class MainActivity : AppCompatActivity() {
 
         setupTripleClickToToggleLogs()
 
+        // ОРИГИНАЛЬНЫЙ ОБРАБОТЧИК ДЛЯ ПОДКЛЮЧЕНИЯ РЕАЛЬНОГО USB УСТРОЙСТВА
         usbConfirmButton.setOnClickListener {
             val ret = lospDev.isLospDeviceConnected()
-//            if (usbAccess.connect()) {
-//            if(true){
             if(ret == 1u){
                 usbConnected = true
                 usbOverlay.visibility = View.GONE
                 mainContent.visibility = View.VISIBLE
                 usbAccess.close()
                 startFrequencyLoop()
+
+                // Показываем кнопки карты и истории
+                btnOpenMap.visibility = View.VISIBLE
+                btnOpenHistory.visibility = View.VISIBLE
             } else {
                 if(ret == 0u)
                 {
@@ -388,46 +514,123 @@ class MainActivity : AppCompatActivity() {
         }, detachFilter)
     }
 
+    /**
+     * Включает режим отладки без USB устройства
+     */
+    private fun enableDebugMode() {
+        // Скрываем overlay
+        usbOverlay.visibility = View.GONE
+        mainContent.visibility = View.VISIBLE
+
+        // Включаем режим мок-данных
+        MockDataManager.enableMockMode()
+        usbConnected = true
+
+        // Инициализируем LospDev
+        LospDevVariables.lospDev = LospDev(this)
+        LospDevVariables.log = ::log
+        LospDevVariables.blink_log = ::blink_log
+
+        // Запускаем мок-данные вместо реальных
+        startMockFrequencyLoop()
+
+        // Показываем сообщение
+        Toast.makeText(
+            this,
+            "Включен режим отладки. Используются тестовые данные.",
+            Toast.LENGTH_LONG
+        ).show()
+
+        // Показываем кнопки карты и истории
+        btnOpenMap.visibility = View.VISIBLE
+        btnOpenHistory.visibility = View.VISIBLE
+
+        // Также сразу показываем лог-контролы (опционально)
+        val logControlContainer = findViewById<View>(R.id.logControlContainer)
+        logControlContainer.visibility = View.VISIBLE
+        logTextView.visibility = View.VISIBLE
+        isLogVisible = true
+    }
+
     private fun startFrequencyLoop() {
         frecJob?.cancel()
         frecJob = lifecycleScope.launch {
-            while (isActive && usbConnected) {
+            while (isActive && usbConnected && lospDev != null) {
                 withContext(Dispatchers.IO) {
                     try {
-                        if(isAutoModeEnabled)
-                        {
+                        if (isAutoModeEnabled) {
                             frec_tracking(lospDev, LospDevVariables.log)
-//                            frec_tracking(lospDev, LospDevVariables.blink_log)
-                        }
-                        else
-                        {
+                        } else {
                             frec_exec(lospDev, LospDevVariables.log, isStopFrecExecMeasurment)
                         }
-
-                    } catch (_: Exception) { }
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Ошибка в frequency loop: ${e.message}")
+                    }
                 }
 
                 var freq: Float = 0f
                 var err: Float? = 0f
 
-                if(isAutoModeEnabled)
-                {
+                if (isAutoModeEnabled) {
                     freq = 1f / tracking_period_av1.toFloat()
                     err = (1f / sqrt(tracking_m_sum.toFloat())) / tracking_period_av1.toFloat()
-                }
-                else
-                {
+                } else {
                     freq = frec_old.toFloat()
                     err = if (period_acc_old.toInt() == 0) null
-                    else if (accuracy.toFloat() < 1e-99) freq * period_acc_old.toFloat() / 100f
+                    else if (accuracy.toFloat() < 1e-99f) freq * period_acc_old.toFloat() / 100f
                     else period_acc_old.toFloat()
                 }
 
-
-                gauge.frequency = freq
-                gauge.error = err
+                if (::gauge.isInitialized) {
+                    gauge.frequency = freq
+                    gauge.error = err
+                }
 
                 delay(100)
+            }
+        }
+    }
+
+    /**
+     * Запускает цикл с мок-данными для режима отладки
+     */
+    private fun startMockFrequencyLoop() {
+        frecJob?.cancel()
+        frecJob = lifecycleScope.launch {
+            while (isActive && usbConnected) {
+                // Получаем мок-данные
+                val data = MockDataManager.getMockMeasurement()
+
+                // Обновляем UI в главном потоке
+                withContext(Dispatchers.Main) {
+                    // Обновляем датчик частоты
+                    if (::gauge.isInitialized) {
+                        gauge.frequency = data.frequency
+                        gauge.error = data.frequency * 0.05f // 5% погрешность
+                    }
+
+                    // Добавляем запись в лог (если лог виден)
+                    if (isLogVisible) {
+                        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+                            .format(Date(data.timestamp))
+                        val logMsg = """
+                            $timeStr:
+                            Частота: ${"%.2f".format(data.frequency)} Гц
+                            Доза: ${"%.6f".format(data.dose)} мкЗв/ч
+                            Температура: ${"%.1f".format(data.temperature)} °C
+                            УФ: ${"%.6f".format(data.uv)} Вт/см²
+                        """.trimIndent()
+
+                        if (clearLogSwitch.isChecked) {
+                            logTextView.text = logMsg
+                        } else {
+                            logTextView.append("\n\n$logMsg")
+                        }
+                    }
+                }
+
+                // Задержка между обновлениями
+                delay(1000)
             }
         }
     }
@@ -447,20 +650,56 @@ class MainActivity : AppCompatActivity() {
             lastClickTime = now
 
             if (clickCount == 3) {
-                val newVisibility =
-                    if (logControlContainer.isVisible)
-                    {
-                        isLogVisible = false
-                        View.GONE
-                    }
-                    else
-                    {
-                        isLogVisible = true
-                        View.VISIBLE
-                    }
+                val newVisibility = if (logControlContainer.isVisible) {
+                    isLogVisible = false
+                    View.GONE
+                } else {
+                    isLogVisible = true
+                    View.VISIBLE
+                }
                 logControlContainer.visibility = newVisibility
                 logTextView.visibility = newVisibility
+                btnOpenMap.visibility = newVisibility
+                btnOpenHistory.visibility = newVisibility
                 clickCount = 0
+            }
+        }
+    }
+
+    // Методы для проверки разрешений GPS
+    private fun checkLocationPermissions(): Boolean {
+        return (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+    }
+
+    private fun requestLocationPermissions() {
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ),
+            101
+        )
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if (requestCode == 101) {
+            if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                val intent = Intent(this, MapActivity::class.java)
+                startActivity(intent)
+            } else {
+                Toast.makeText(
+                    this,
+                    "Для отображения карты необходимы разрешения на доступ к местоположению",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
     }
@@ -472,8 +711,7 @@ class MainActivity : AppCompatActivity() {
      */
     @SuppressLint("SetTextI18n")
     private fun blink_log(message: String) {
-//        showBlinkingText(message)
-//        blinkingText.text = message
+        // Оставьте пустым или добавьте свою логику
     }
 
     /**

@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Заголовок как в activity_freq -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="История измерений"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/black"
+            android:gravity="center"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Кнопка загрузки истории -->
+        <Button
+            android:id="@+id/btnLoadHistory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Загрузить историю"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Кнопка поиска (с иконкой поиска в тексте) -->
+        <Button
+            android:id="@+id/btnSearch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🔍 Поиск сессий"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Кнопка фильтрации -->
+        <Button
+            android:id="@+id/btnFilter"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Фильтр сессий"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Разделитель -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#E0E0E0"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Группа кнопок управления -->
+        <Button
+            android:id="@+id/btnShowOnMap"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Показать на карте"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnExportAll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Экспорт всех сессий"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnDeleteAll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Удалить все сессии"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Контейнер для списка сессий -->
+        <FrameLayout
+            android:id="@+id/sessionsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="300dp"
+            android:background="#FAFAFA"
+            android:padding="8dp">
+
+            <!-- Список сессий -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="vertical" />
+
+            <!-- Состояние "пусто" -->
+            <TextView
+                android:id="@+id/emptyStateView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="Нет сохраненных сессий\n\nНачните запись на карте"
+                android:textSize="16sp"
+                android:textColor="#666666"
+                android:gravity="center"
+                android:padding="32dp"
+                android:visibility="visible" />
+
+            <!-- Прогресс бар -->
+            <ProgressBar
+                android:id="@+id/progressBar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <!-- Переключатель автоочистки -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Авто-очистка лога"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+
+            <Switch
+                android:id="@+id/clearLogSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true" />
+        </LinearLayout>
+
+        <!-- Лог как в activity_freq -->
+        <TextView
+            android:id="@+id/logTextView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="100dp"
+            android:background="#EEEEEE"
+            android:padding="12dp"
+            android:text="История загружена\nГотово к работе"
+            android:textColor="@android:color/black"
+            android:textSize="14sp"
+            android:layout_marginTop="12dp" />
+
+        <!-- Кнопка очистки лога -->
+        <Button
+            android:id="@+id/btnClearLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Очистить лог"
+            android:layout_marginTop="8dp" />
+
+        <!-- Кнопка назад как в activity_freq -->
+        <Button
+            android:id="@+id/backButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Назад"
+            android:layout_marginTop="20dp" />
+
+    </LinearLayout>
+</ScrollView>

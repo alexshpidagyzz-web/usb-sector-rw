@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@android:color/white">
+
+    <!-- Панель инструментов -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#F5F5F5"
+        android:padding="12dp"
+        android:elevation="4dp">
+
+        <Button
+            android:id="@+id/btnBack"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="←"
+            android:textSize="20sp"
+            android:minWidth="48dp"
+            android:background="@android:color/transparent" />
+
+        <TextView
+            android:id="@+id/tvSessionName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Название сессии"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:textColor="@android:color/black"
+            android:maxLines="1"
+            android:ellipsize="end"
+            tools:text="Сессия измерений" />
+
+        <Button
+            android:id="@+id/btnExport"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📤"
+            android:textSize="20sp"
+            android:minWidth="48dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="Экспорт" />
+    </LinearLayout>
+
+    <!-- Панель управления сессией -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#EEEEEE"
+        android:padding="8dp">
+
+        <Button
+            android:id="@+id/btnShowOnMap"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🗺️ На карте"
+            android:layout_marginEnd="4dp"
+            tools:text="🗺️ На карте" />
+
+        <Button
+            android:id="@+id/btnDelete"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🗑️ Удалить"
+            android:layout_marginStart="4dp"
+            tools:text="🗑️ Удалить" />
+    </LinearLayout>
+
+    <!-- Информация о сессии -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FAFAFA">
+
+        <TextView
+            android:id="@+id/tvSessionInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            android:textSize="12sp"
+            android:textColor="#666666"
+            android:lineSpacingExtra="4dp"
+            tools:text="ID: session_123456\nНачало: 01.01.2024 12:00:00\nОкончание: 01.01.2024 12:30:00\nПродолжительность: 00:30:00\nТочек измерений: 50\nРасстояние: 1250.50 м\nСредняя скорость: 2.50 км/ч\nМакс. скорость: 5.00 км/ч\nСредняя частота: 50.25 Гц\nСредняя доза: 0.150000 мкЗв/ч\nСредняя температура: 25.5 °C\nСредний УФ: 0.012500 Вт/см²" />
+    </ScrollView>
+
+    <!-- Панель выбора (видна только в режиме выбора) -->
+    <LinearLayout
+        android:id="@+id/selectionControls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#2196F3"
+        android:padding="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvSelectionCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Выбрано: 0"
+            android:textSize="14sp"
+            android:textColor="@android:color/white"
+            android:gravity="center"
+            tools:text="Выбрано: 0" />
+
+        <Button
+            android:id="@+id/btnSelectAll"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Выбрать все"
+            android:textColor="@android:color/white"
+            android:background="@android:color/transparent"
+            tools:text="Выбрать все" />
+
+        <Button
+            android:id="@+id/btnDeselectAll"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Снять все"
+            android:textColor="@android:color/white"
+            android:background="@android:color/transparent"
+            tools:text="Снять все" />
+    </LinearLayout>
+
+    <!-- Список измерений -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scrollbars="vertical" />
+
+        <!-- Состояние "пусто" -->
+        <TextView
+            android:id="@+id/emptyStateView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="Нет измерений в этой сессии"
+            android:textSize="16sp"
+            android:textColor="#999999"
+            android:gravity="center"
+            android:visibility="gone"
+            tools:text="Нет измерений в этой сессии" />
+
+        <!-- Прогресс бар -->
+        <ProgressBar
+            android:id="@+id/progressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+    </FrameLayout>
+
+</LinearLayout>

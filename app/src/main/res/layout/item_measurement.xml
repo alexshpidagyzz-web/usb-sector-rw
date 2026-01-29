@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cardView"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    android:foreground="?android:attr/selectableItemBackground"
+    app:cardCornerRadius="4dp"
+    app:cardElevation="1dp">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="12dp">
+
+        <!-- Checkbox для выбора -->
+        <CheckBox
+            android:id="@+id/checkboxSelect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:visibility="gone" />
+
+        <!-- Содержимое измерения -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_toEndOf="@id/checkboxSelect"
+            android:layout_marginStart="8dp"
+            android:orientation="vertical">
+
+            <!-- Первая строка: Время -->
+            <TextView
+                android:id="@+id/tvMeasurementTime"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="12:30:45.123"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@android:color/black" />
+
+            <!-- Вторая строка: Координаты -->
+            <TextView
+                android:id="@+id/tvMeasurementCoordinates"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="55.755825, 37.617298"
+                android:textSize="12sp"
+                android:textColor="#666666"
+                android:layout_marginTop="2dp" />
+
+            <!-- Третья строка: Данные измерений -->
+            <TextView
+                android:id="@+id/tvMeasurementData"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Частота: 50.12 Гц | Доза: 0.150000 мкЗв/ч"
+                android:textSize="12sp"
+                android:textColor="#2196F3"
+                android:layout_marginTop="4dp" />
+
+        </LinearLayout>
+
+        <!-- Индикатор уровня дозы (правая полоска) -->
+        <View
+            android:layout_width="4dp"
+            android:layout_height="match_parent"
+            android:layout_alignParentEnd="true"
+            android:background="#4CAF50" />
+
+    </RelativeLayout>
+
+</androidx.cardview.widget.CardView>

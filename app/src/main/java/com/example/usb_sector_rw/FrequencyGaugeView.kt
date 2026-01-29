@@ -89,10 +89,16 @@ class FrequencyGaugeView @JvmOverloads constructor(
         canvas.drawArc(rect, 180f, angle, false, paintArc)
 
         val freqLabel = when (displayUnit) {
-            DisplayUnit.HERTZ -> if (frequency >= 1000f)
-                String.format("%.${accuracy}f кГц", frequency / 1000f)
-            else
-                String.format("%.${accuracy}f Гц", frequency)
+            DisplayUnit.HERTZ -> when {
+                frequency >= 1_000_000_000f ->
+                    String.format("%.${accuracy}f ГГц", frequency / 1_000_000_000f)
+                frequency >= 1_000_000f ->
+                    String.format("%.${accuracy}f МГц", frequency / 1_000_000f)
+                frequency >= 1000f ->
+                    String.format("%.${accuracy}f кГц", frequency / 1000f)
+                else ->
+                    String.format("%.${accuracy}f Гц", frequency)
+            }
 
             DisplayUnit.RENTGEN -> {
                 val rentgen = frequency * DOEZ_COEFF
@@ -128,10 +134,12 @@ class FrequencyGaugeView @JvmOverloads constructor(
 
             val (scaledErr, unit) = when (displayUnit) {
                 DisplayUnit.HERTZ -> {
-                    if (errValue >= 1000f)
-                        errValue / 1000f to "кГц"
-                    else
-                        errValue to "Гц"
+                    when {
+                        errValue >= 1_000_000_000f -> errValue / 1_000_000_000f to "ГГц"
+                        errValue >= 1_000_000f     -> errValue / 1_000_000f     to "МГц"
+                        errValue >= 1000f          -> errValue / 1000f          to "кГц"
+                        else                       -> errValue                  to "Гц"
+                    }
                 }
 
                 DisplayUnit.RENTGEN -> {

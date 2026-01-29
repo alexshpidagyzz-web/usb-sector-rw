@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/rootFrame"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -13,24 +14,25 @@
         android:background="@android:color/white">
 
         <androidx.constraintlayout.widget.ConstraintLayout
-            xmlns:app="http://schemas.android.com/apk/res-auto"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="16dp">
 
             <TextView
                 android:id="@+id/headerText"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Radiation meter for Mikhail Ilyich"
+                android:text="Radiation meter for PRAM"
                 android:textSize="22sp"
                 android:textStyle="bold"
                 android:textColor="@android:color/black"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="20dp"
+                android:layout_marginTop="20dp"
                 android:gravity="center"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent" />
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0.5" />
 
             <LinearLayout
                 android:id="@+id/spinnerContainer"
@@ -102,7 +104,7 @@
                     android:text="Рентгены"
                     android:paddingStart="8dp" />
             </LinearLayout>
-            
+
             <!-- Лог и переключатель очистки -->
             <LinearLayout
                 android:id="@+id/logControlContainer"
@@ -140,9 +142,38 @@
                 android:maxLines="500"
                 android:scrollbars="vertical"
                 android:layout_marginTop="8dp"
+                android:visibility="gone"
                 app:layout_constraintTop_toBottomOf="@id/logControlContainer"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent" />
+
+            <!-- Кнопка для открытия карты -->
+            <Button
+                android:id="@+id/btnOpenMap"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:text="🗺️ Открыть карту GPS"
+                android:layout_marginTop="16dp"
+                android:padding="12dp"
+                android:backgroundTint="#2196F3"
+                android:textColor="@android:color/white"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/logTextView"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <Button
+                android:id="@+id/btnOpenHistory"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📋 История"
+                android:textSize="14sp"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/btnOpenMap" />
+
         </androidx.constraintlayout.widget.ConstraintLayout>
     </ScrollView>
 
@@ -164,12 +195,23 @@
             android:text="Пожалуйста, подключите USB-устройство"
             android:textSize="20sp"
             android:textColor="@android:color/black"
-            android:layout_marginBottom="20dp" />
+            android:layout_marginBottom="20dp"
+            android:textAlignment="center"/>
 
         <Button
             android:id="@+id/usbConfirmButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Подключено" />
+        <!-- В LinearLayout с id usbOverlay добавь эту кнопку -->
+        <Button
+            android:id="@+id/btnDebugMode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="РЕЖИМ ОТЛАДКИ (БЕЗ USB)"
+            android:layout_marginTop="16dp"
+            android:backgroundTint="#FF9800"
+            android:textColor="@android:color/white"
+            android:padding="12dp" />
     </LinearLayout>
 </FrameLayout>

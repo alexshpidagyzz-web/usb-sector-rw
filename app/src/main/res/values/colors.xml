@@ -2,4 +2,26 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- Существующие цвета -->
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+
+    <!-- Новые цвета для записи и карты -->
+    <color name="recording_active">#FFD32F2F</color> <!-- Красный для записи -->
+    <color name="recording_inactive">#FF4CAF50</color> <!-- Зеленый для остановки -->
+    <color name="route_color">#1E88E5</color> <!-- Синий для маршрута -->
+    <color name="route_outline_color">#1565C0</color> <!-- Темно-синий для контура -->
+    <color name="error_color">#FF5252</color> <!-- Красный для ошибок -->
+    <color name="share_button">#2196F3</color> <!-- Синий для кнопки поделиться -->
+
+    <!-- Цвета для уровней дозы -->
+    <color name="dose_low">#4CAF50</color> <!-- Зеленый: низкий уровень -->
+    <color name="dose_medium">#FFC107</color> <!-- Желтый: средний уровень -->
+    <color name="dose_high">#FF9800</color> <!-- Оранжевый: высокий уровень -->
+    <color name="dose_very_high">#F44336</color> <!-- Красный: очень высокий -->
+
+
 </resources>

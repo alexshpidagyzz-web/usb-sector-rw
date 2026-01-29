@@ -36,7 +36,6 @@ android {
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
@@ -45,4 +44,10 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+
+    // OpenStreetMap для Android
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
+
+    // Location services
+    implementation("com.google.android.gms:play-services-location:21.0.1")
 }
