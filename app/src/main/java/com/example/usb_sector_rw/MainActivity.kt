@@ -1,86 +1,63 @@
 package com.example.usb_sector_rw
 
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.graphics.Color
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
+import android.os.Build
+import android.os.Bundle
+import android.os.Environment
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import android.view.View
+import android.widget.*
+import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import com.example.usb_sector_rw.history.SimpleHistoryActivity
+import com.example.usb_sector_rw.losp.FALSE
+
 import com.example.usb_sector_rw.msd.LospDev
 import com.example.usb_sector_rw.msd.temp_exec
 import com.example.usb_sector_rw.msd.temp_test
 import com.example.usb_sector_rw.msd.uv_exec
 import com.example.usb_sector_rw.msd.uv_test
 import com.example.usb_sector_rw.msd.set_uv_range
-
-import com.example.usb_sector_rw.losp.FALSE
-import android.animation.ObjectAnimator
-import android.annotation.SuppressLint
-import android.app.PendingIntent
-import android.content.BroadcastReceiver
-import android.content.ContentValues.TAG
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.graphics.Color
-import android.hardware.usb.UsbDevice
-import android.hardware.usb.UsbManager
-import android.os.Build
-import android.os.Bundle
-import android.util.Log
-import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.LinearLayout
-import android.widget.Spinner
-import android.widget.Switch
-import android.widget.TextView
-import android.widget.Toast
-import androidx.annotation.RequiresApi
-import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
-import com.example.usb_sector_rw.history.HistoryActivity
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.isActive
-import java.lang.Boolean.TRUE
-import kotlin.math.sqrt
-import kotlinx.coroutines.isActive
-import androidx.core.view.isVisible
-import kotlin.random.Random
-
-// Добавьте эти импорты для работы с локацией
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import com.example.usb_sector_rw.LospDevVariables.lospDev
-import com.google.android.gms.location.*
-
-// Импорты для мок-данных
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import kotlinx.coroutines.*
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.math.sin
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.cos
-
+import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.random.Random
 
 object LospDevVariables {
     @SuppressLint("StaticFieldLeak")
     lateinit var lospDev: LospDev
     lateinit var log: (String) -> Unit
-    lateinit var blink_log: (String) -> Unit
-    var isRunMeasurment : Boolean = false;
-    var isStopFrecExecMeasurment : Boolean = false;
-    var isRunFrecTrackingMeasurment : Boolean = false;
-    var isRunUvMeasurement : Boolean = false
-    var isRunTempMeasurement : Boolean = false
+    var isRunMeasurment: Boolean = false
+    var isStopFrecExecMeasurment: Boolean = false
+    var isRunFrecTrackingMeasurment: Boolean = false
+    var isRunUvMeasurement: Boolean = false
+    var isRunTempMeasurement: Boolean = false
     internal var measureJob: Job? = null
 
-    fun getFrec() : Float
-    {
+    fun getFrec(): Float {
         val freq = frecUc(1, lospDev, log)
 
         return if (freq >= 0.0) {
@@ -91,69 +68,55 @@ object LospDevVariables {
         }
     }
 
-    fun getFrecTest()
-    {
-        frec_test(lospDev, log);
+    fun getFrecTest() {
+        frec_test(lospDev, log)
     }
 
-    fun getFrecExec()
-    {
+    fun getFrecExec() {
         frec_exec(lospDev, log, isStopFrecExecMeasurment)
     }
 
-    fun getFrecTracking()
-    {
+    fun getFrecTracking() {
         frec_tracking(lospDev, log)
     }
 
-    fun getUvTest()
-    {
+    fun getUvTest() {
         uv_test(lospDev, log)
     }
 
-    fun setUvRange(range : UInt)
-    {
+    fun setUvRange(range: UInt) {
         set_uv_range(range, lospDev, log)
     }
 
-    fun getUvExec(call_last : Boolean, is_graph : Boolean) : Float
-    {
-        var ret = uv_exec(lospDev, log, call_last, is_graph)
-
-        return ret
+    fun getUvExec(call_last: Boolean, is_graph: Boolean): Float {
+        return uv_exec(lospDev, log, call_last, is_graph)
     }
 
-    fun getTempTest()
-    {
+    fun getTempTest() {
         temp_test(lospDev, log)
     }
 
-    fun getTempExec(call_last : Boolean, is_graph : Boolean) : Float
-    {
-        var ret = temp_exec(lospDev, log, call_last, is_graph)
-
-        return ret
+    fun getTempExec(call_last: Boolean, is_graph: Boolean): Float {
+        return temp_exec(lospDev, log, call_last, is_graph)
     }
-
 }
 
-// Простой менеджер мок-данных
 object MockDataManager {
-    private var isMockMode = false
+    private var isMockMode = AtomicBoolean(false)
     private var mockCounter = 0
 
     fun enableMockMode() {
-        isMockMode = true
+        isMockMode.set(true)
         mockCounter = 0
     }
 
     fun disableMockMode() {
-        isMockMode = false
+        isMockMode.set(false)
+        mockCounter = 0
     }
 
-    fun isInMockMode(): Boolean = isMockMode
+    fun isInMockMode(): Boolean = isMockMode.get()
 
-    // Генерация тестовой частоты
     fun getMockFrequency(): Float {
         val base = 50f
         val variation = sin(mockCounter * 0.1).toFloat() * 20f
@@ -161,22 +124,18 @@ object MockDataManager {
         return base + variation
     }
 
-    // Генерация тестовой дозы
     fun getMockDose(): Float {
         return 0.1f + (sin(mockCounter * 0.05).toFloat() * 0.2f)
     }
 
-    // Генерация тестовой температуры
     fun getMockTemperature(): Float {
         return 20f + (cos(mockCounter * 0.07).toFloat() * 10f)
     }
 
-    // Генерация тестового УФ
     fun getMockUv(): Float {
         return 0.01f + (sin(mockCounter * 0.03).toFloat() * 0.04f)
     }
 
-    // Получение всех данных сразу
     data class MeasurementData(
         val frequency: Float,
         val dose: Float,
@@ -195,104 +154,74 @@ object MockDataManager {
     }
 }
 
-/**
- * MainActivity provides a user interface for reading and writing raw sectors
- * to a USB Mass Storage device connected via Android's USB Host API.
- *
- * The activity allows users to:
- * - Scan and list available USB devices
- * - Request permission for USB access
- * - Read a sector and display its hexadecimal content
- * - Write user data to a specific sector
- * - Clear a sector by writing zero bytes
- *
- * USB sector access operations are delegated to the [UsbSectorAccess] class.
- */
 class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val ACTION_USB_PERMISSION = "com.example.usb_sector_rw.USB_PERMISSION"
+        private const val PERMISSION_REQUEST_LOCATION = 101
     }
 
-    val options = listOf("0.1s", "0.2s", "0.5s", "1s", "5s", "10s", "60s", "1h", "1d", "авто")
-    val options_accuracy = listOf("0", "1", "2", "3", "4", "5", "7")
+    private val options = listOf("0.1s", "0.2s", "0.5s", "1s", "5s", "10s", "60s", "1h", "1d", "авто")
+    private val optionsAccuracy = listOf("0", "1", "2", "3", "4", "5", "7")
 
-    private lateinit var sectorInput: EditText
-    private lateinit var dataInput: EditText
-    private lateinit var readBtn: Button
-    private lateinit var writeBtn: Button
-    private lateinit var clearBtn: Button
-    private lateinit var scanBtn: Button
-    private lateinit var overwriteBtn: Button
-    private lateinit var logText: TextView
-    private lateinit var offsetInput: TextView
-    private lateinit var readBytesBtn: Button
-    private lateinit var lengthInput: TextView
-    @SuppressLint("UseSwitchCompatOrMaterialCode")
-    private lateinit var detailSwitch: Switch
-    private lateinit var toggleButton: ImageButton
-    private lateinit var toggleContainer: LinearLayout
-    private lateinit var btnOpenFrequency: Button
-    private lateinit var btnOpenUv: Button
-    private lateinit var btnOpenTemp: Button
-    private lateinit var gauge : FrequencyGaugeView
-    private lateinit var spinner : Spinner
+    private lateinit var gauge: FrequencyGaugeView
+    private lateinit var spinner: Spinner
     private lateinit var usbOverlay: View
     private lateinit var mainContent: View
     private lateinit var usbConfirmButton: Button
     private lateinit var usbAccess: UsbSectorAccess
-    private lateinit var accuracyOptionsSpinner : Spinner
-    private lateinit var unitSwitch: Switch
+    private lateinit var accuracyOptionsSpinner: Spinner
+    private lateinit var unitSwitch: SwitchCompat
     private lateinit var logTextView: TextView
-    private lateinit var clearLogSwitch: Switch
-
-    // Добавьте кнопку для открытия карты
-    private lateinit var btnOpenMap: Button
-
-    // НОВАЯ КНОПКА ДЛЯ ИСТОРИИ
-    private lateinit var btnOpenHistory: Button
-
-    // КНОПКА ДЛЯ РЕЖИМА ОТЛАДКИ
+    private lateinit var clearLogSwitch: SwitchCompat
     private lateinit var btnDebugMode: Button
+    private lateinit var logControlContainer: View
+    private lateinit var headerText: TextView
+
+    // Меню элементы
+    private lateinit var btnMenu: ImageButton
+    private lateinit var sidebarMenu: LinearLayout
+    private lateinit var menuOverlay: View
+    private lateinit var btnCloseMenu: ImageButton
 
     private var usbConnected = false
     private var isAutoModeEnabled = false
     private var frecJob: Job? = null
-
+    private var mockUpdateJob: Job? = null
     private var clickCount = 0
     private var lastClickTime = 0L
     private val tripleClickInterval = 600L
     private var isLogVisible = false
-    private var blinkingAnimator: ObjectAnimator? = null
-    private var blinkingResetJob: Job? = null
     private var isStopFrecExecMeasurment = false
+    private var currentMockSessionFile: File? = null
+    private var isMockModeActive = false
 
-    var expanded = false
-
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-
-    /**
-     * BroadcastReceiver that handles USB permission responses.
-     *
-     * Logs whether permission was granted or denied for the detected USB device.
-     */
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var usbReceiver: BroadcastReceiver
 
-    /**
-     * Initializes the user interface, sets up event handlers, registers USB permission receiver,
-     * and defines logic for each button action: scan, read, write, and clear.
-     *
-     * @param savedInstanceState The previously saved state of the activity, if any.
-     */
     @SuppressLint("SetTextI18n")
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        usbAccess = UsbSectorAccess(this)
+        // Инициализация компонентов
+        initializeViews()
+        setupSpinners()
+        setupClickListeners()
+        setupMenuListeners()
+        setupTripleClickToToggleLogs()
+        initializeLospDev()
+        setupUsbReceivers()
+        initializeLocationClient()
 
-        gauge = findViewById<FrequencyGaugeView>(R.id.frequencyGauge)
+        // Начальное состояние
+        updateUiState(false)
+    }
+
+    private fun initializeViews() {
+        gauge = findViewById(R.id.frequencyGauge)
         spinner = findViewById(R.id.frequencyOptionsSpinner)
         usbOverlay = findViewById(R.id.usbOverlay)
         mainContent = findViewById(R.id.mainContent)
@@ -301,345 +230,530 @@ class MainActivity : AppCompatActivity() {
         unitSwitch = findViewById(R.id.unitSwitch)
         logTextView = findViewById(R.id.logTextView)
         clearLogSwitch = findViewById(R.id.clearLogSwitch)
-
-        // Инициализируем кнопку для карты
-        btnOpenMap = findViewById(R.id.btnOpenMap)
-
-        // ИНИЦИАЛИЗИРУЕМ КНОПКУ ИСТОРИИ
-        btnOpenHistory = findViewById(R.id.btnOpenHistory)
-
-        // ИНИЦИАЛИЗИРУЕМ КНОПКУ РЕЖИМА ОТЛАДКИ
         btnDebugMode = findViewById(R.id.btnDebugMode)
+        logControlContainer = findViewById(R.id.logControlContainer)
+        headerText = findViewById(R.id.headerText)
 
-        val logControlContainer = findViewById<View>(R.id.logControlContainer)
+        // Меню элементы
+        btnMenu = findViewById(R.id.btnMenu)
+        sidebarMenu = findViewById(R.id.sidebarMenu)
+        menuOverlay = findViewById(R.id.menuOverlay)
+        btnCloseMenu = findViewById(R.id.btnCloseMenu)
 
+        usbAccess = UsbSectorAccess(this)
         clearLogSwitch.isChecked = true
-        logControlContainer.visibility = View.GONE
-        logTextView.visibility = View.GONE
+    }
 
-        // Настраиваем обработчик для кнопки карты
-        btnOpenMap.setOnClickListener {
-            // Проверяем разрешения перед открытием карты
-            if (checkLocationPermissions()) {
-                val intent = Intent(this, MapActivity::class.java)
-                startActivity(intent)
-            } else {
-                requestLocationPermissions()
-            }
-        }
-
-        // НАСТРАИВАЕМ ОБРАБОТЧИК ДЛЯ КНОПКИ ИСТОРИИ
-        btnOpenHistory.setOnClickListener {
-            println("DEBUG: Кнопка 'История' нажата")
-
-            // Простая версия для тестирования
-            try {
-                val intent = Intent(this, HistoryActivity::class.java)
-                startActivity(intent)
-                Toast.makeText(this, "Открываю историю...", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
-            }
-        }
-
-        // НАСТРАИВАЕМ ОБРАБОТЧИК ДЛЯ КНОПКИ РЕЖИМА ОТЛАДКИ
-        btnDebugMode.setOnClickListener {
-            enableDebugMode()
-        }
-
-        btnOpenMap.visibility = View.GONE
-        btnOpenHistory.visibility = View.GONE
-
+    private fun setupSpinners() {
+        // Настройка спиннера частоты
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, options)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinner.adapter = adapter
         spinner.setSelection(3)
 
-        val adapter_accuracy = ArrayAdapter(this, android.R.layout.simple_spinner_item, options_accuracy)
-        adapter_accuracy.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        accuracyOptionsSpinner.adapter = adapter_accuracy
-        accuracyOptionsSpinner.setSelection(1)
-
-        setupTripleClickToToggleLogs()
-
-        // ОРИГИНАЛЬНЫЙ ОБРАБОТЧИК ДЛЯ ПОДКЛЮЧЕНИЯ РЕАЛЬНОГО USB УСТРОЙСТВА
-        usbConfirmButton.setOnClickListener {
-            val ret = lospDev.isLospDeviceConnected()
-            if(ret == 1u){
-                usbConnected = true
-                usbOverlay.visibility = View.GONE
-                mainContent.visibility = View.VISIBLE
-                usbAccess.close()
-                startFrequencyLoop()
-
-                // Показываем кнопки карты и истории
-                btnOpenMap.visibility = View.VISIBLE
-                btnOpenHistory.visibility = View.VISIBLE
-            } else {
-                if(ret == 0u)
-                {
-                    Toast.makeText(
-                        this,
-                        "USB Mass Storage устройство не найдено или нет разрешения.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-                else
-                {
-                    Toast.makeText(
-                        this,
-                        "Неверный идентификатор устройства: $ret",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
-
-        gauge.colorZoneProvider = { freq ->
-            when {
-                freq < 10f -> Color.GREEN
-                freq < 25f -> Color.rgb(255, 165, 0)
-                else -> Color.RED
-            }
-        }
-
-        var freqSpinnerInitialized = false
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                if (!freqSpinnerInitialized) {
-                    freqSpinnerInitialized = true
-                    return
-                }
-
                 val selected = parent.getItemAtPosition(position).toString().trim()
-
-                when (selected) {
-                    "авто" -> {
-                        isAutoModeEnabled = true
-                    }
-
-                    "1h" -> {
-                        averaging_period = 3600f
-                        is_no_set = FALSE
-                        isAutoModeEnabled = false
-                    }
-
-                    "1d" -> {
-                        averaging_period = 86400f
-                        is_no_set = FALSE
-                        isAutoModeEnabled = false
-                    }
-
-                    else -> {
-                        val clean = selected.removeSuffix("s").trim()
-                        val value = clean.toFloatOrNull()
-
-                        if (value != null) {
-                            averaging_period = value
-                            is_no_set = FALSE
-                            isAutoModeEnabled = false
-                        } else {
-                            isAutoModeEnabled = true
-                        }
-                    }
-                }
-
-                tick_stop = 0UL
-
-                Log.w("MAIN", "averaging_period = $averaging_period, is_no_set = $is_no_set")
+                handleFrequencySelection(selected)
             }
 
             override fun onNothingSelected(parent: AdapterView<*>) {}
         }
 
-        var accuracySpinnerInitialized = false
+        // Настройка спиннера точности
+        val accuracyAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, optionsAccuracy)
+        accuracyAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        accuracyOptionsSpinner.adapter = accuracyAdapter
+        accuracyOptionsSpinner.setSelection(1)
+
         accuracyOptionsSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                if (!accuracySpinnerInitialized) {
-                    accuracySpinnerInitialized = true
-                    return
-                }
-
                 val selected = parent.getItemAtPosition(position).toString().trim()
-                val value = selected.toUIntOrNull()
-                if (value != null) {
-                    gauge.accuracy = value
-                    Log.d("MAIN", "accuracy = $value")
-                }
+                selected.toUIntOrNull()?.let { gauge.accuracy = it }
             }
 
             override fun onNothingSelected(parent: AdapterView<*>) {}
         }
 
+        // Настройка переключателя единиц измерения
         unitSwitch.setOnCheckedChangeListener { _, isChecked ->
             gauge.displayUnit = if (isChecked)
                 FrequencyGaugeView.DisplayUnit.RENTGEN
             else
                 FrequencyGaugeView.DisplayUnit.HERTZ
         }
+    }
 
-        FrequencyLogger.init(this)
-        LospDevVariables.lospDev = LospDev(this)
-        LospDevVariables.log = ::log
-        LospDevVariables.blink_log = ::blink_log
-
-        // Register USB permission receiver
-        val filter = IntentFilter(ACTION_USB_PERMISSION)
-        usbReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                val device: UsbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE) ?: return
-                if (intent.action == ACTION_USB_PERMISSION) {
-                    synchronized(this) {
-                        if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                            log("Permission granted for device ${device.deviceName}")
-                        } else {
-                            log("Permission denied for device ${device.deviceName}")
-                        }
-                    }
+    private fun handleFrequencySelection(selected: String) {
+        when (selected) {
+            "авто" -> {
+                isAutoModeEnabled = true
+                tick_stop = 0UL
+            }
+            "1h" -> {
+                averaging_period = 3600f
+                is_no_set = FALSE
+                isAutoModeEnabled = false
+                tick_stop = 0UL
+            }
+            "1d" -> {
+                averaging_period = 86400f
+                is_no_set = FALSE
+                isAutoModeEnabled = false
+                tick_stop = 0UL
+            }
+            else -> {
+                val clean = selected.removeSuffix("s").trim()
+                val value = clean.toFloatOrNull()
+                if (value != null) {
+                    averaging_period = value
+                    is_no_set = FALSE
+                    isAutoModeEnabled = false
+                    tick_stop = 0UL
+                } else {
+                    isAutoModeEnabled = true
                 }
             }
         }
-        registerReceiver(usbReceiver, filter, RECEIVER_NOT_EXPORTED)
-
-        val detachFilter = IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED)
-        registerReceiver(object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                val device: UsbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE) ?: return
-                usbConnected = false
-                frecJob?.cancel()
-                usbOverlay.visibility = View.VISIBLE
-                mainContent.visibility = View.GONE
-                log("Устройство отключено: ${device.deviceName}")
-            }
-        }, detachFilter)
+        Log.w("MAIN", "averaging_period = $averaging_period, is_no_set = $is_no_set")
     }
 
-    /**
-     * Включает режим отладки без USB устройства
-     */
+    private fun setupClickListeners() {
+        // Кнопка подключения USB
+        usbConfirmButton.setOnClickListener {
+            handleUsbConnection()
+        }
+
+        // Кнопка режима отладки
+        btnDebugMode.setOnClickListener {
+            enableDebugMode()
+        }
+
+        // Кнопка открытия меню
+        btnMenu.setOnClickListener {
+            showMenu()
+        }
+
+        // Кнопка закрытия меню
+        btnCloseMenu.setOnClickListener {
+            hideMenu()
+        }
+
+        // Клик по затемнению закрывает меню
+        menuOverlay.setOnClickListener {
+            hideMenu()
+        }
+    }
+
+    private fun setupMenuListeners() {
+        // Главный экран (скрыть меню)
+        findViewById<View>(R.id.menuItemMain).setOnClickListener {
+            hideMenu()
+        }
+
+        // Карта GPS
+        findViewById<View>(R.id.menuItemMap).setOnClickListener {
+            hideMenu()
+            openMapActivity()
+        }
+
+        // История
+        findViewById<View>(R.id.menuItemHistory).setOnClickListener {
+            hideMenu()
+            openHistoryActivity()
+        }
+
+        // Частота
+        findViewById<View>(R.id.menuItemFreq).setOnClickListener {
+            hideMenu()
+            openFreqActivity()
+        }
+
+        // Температура
+        findViewById<View>(R.id.menuItemTemp).setOnClickListener {
+            hideMenu()
+            openTempActivity()
+        }
+
+        // УФ излучение
+        findViewById<View>(R.id.menuItemUv).setOnClickListener {
+            hideMenu()
+            openUvActivity()
+        }
+
+        // Графики
+        findViewById<View>(R.id.menuItemGraphs).setOnClickListener {
+            hideMenu()
+            showGraphSelectionDialog()
+        }
+
+        // О приложении
+        findViewById<View>(R.id.menuItemAbout).setOnClickListener {
+            hideMenu()
+            showAboutDialog()
+        }
+
+        // Выход
+        findViewById<View>(R.id.menuItemExit).setOnClickListener {
+            hideMenu()
+            showExitDialog()
+        }
+    }
+
+    private fun openFreqActivity() {
+        val intent = Intent(this, FreqActivity::class.java)
+        startActivity(intent)
+    }
+
+    private fun openTempActivity() {
+        val intent = Intent(this, TempActivity::class.java)
+        startActivity(intent)
+    }
+
+    private fun openUvActivity() {
+        val intent = Intent(this, UvActivity::class.java)
+        startActivity(intent)
+    }
+
+    @SuppressLint("DiscouragedApi")
+    private fun showGraphSelectionDialog() {
+        val items = arrayOf(
+            "📊 График частоты",
+            "🌡️ График температуры",
+            "☀️ График УФ излучения"
+        )
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Выберите график")
+            .setItems(items) { _, which ->
+                when(which) {
+                    0 -> {
+                        val intent = Intent(this, GraphFreqActivity::class.java)
+                        startActivity(intent)
+                    }
+                    1 -> {
+                        val intent = Intent(this, GraphTempActivity::class.java)
+                        startActivity(intent)
+                    }
+                    2 -> {
+                        val intent = Intent(this, GraphUvActivity::class.java)
+                        startActivity(intent)
+                    }
+                }
+            }
+            .setNegativeButton("Отмена") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun showAboutDialog() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("О приложении")
+            .setMessage(
+                """
+                Radiation meter for PRAM
+                Версия: 1.0
+                
+                Приложение для измерения радиационного фона
+                с использованием USB-датчиков.
+                
+                Функции:
+                • Измерение частоты излучения
+                • GPS-карта с записью маршрута
+                • История измерений
+                • Графики в реальном времени
+                
+                © 2024 PRAM Project
+                """.trimIndent()
+            )
+            .setPositiveButton("OK") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun showExitDialog() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Выход")
+            .setMessage("Вы уверены, что хотите выйти из приложения?")
+            .setPositiveButton("Да") { _, _ ->
+                finishAffinity()
+            }
+            .setNegativeButton("Отмена") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun showMenu() {
+        sidebarMenu.visibility = View.VISIBLE
+        menuOverlay.visibility = View.VISIBLE
+
+        // Анимация выезда
+        sidebarMenu.translationX = sidebarMenu.width.toFloat()
+        sidebarMenu.animate()
+            .translationX(0f)
+            .setDuration(300)
+            .start()
+
+        // Анимация появления затемнения
+        menuOverlay.alpha = 0f
+        menuOverlay.animate()
+            .alpha(1f)
+            .setDuration(300)
+            .start()
+    }
+
+    private fun hideMenu() {
+        // Анимация выезда
+        sidebarMenu.animate()
+            .translationX(sidebarMenu.width.toFloat())
+            .setDuration(300)
+            .withEndAction {
+                sidebarMenu.visibility = View.GONE
+            }
+            .start()
+
+        // Анимация исчезновения затемнения
+        menuOverlay.animate()
+            .alpha(0f)
+            .setDuration(300)
+            .withEndAction {
+                menuOverlay.visibility = View.GONE
+            }
+            .start()
+    }
+
+    private fun handleUsbConnection() {
+        val ret = LospDevVariables.lospDev.isLospDeviceConnected()
+        when (ret) {
+            1u -> {
+                usbConnected = true
+                updateUiState(true)
+                usbAccess.close()
+                startFrequencyLoop()
+                logToUi("USB устройство подключено")
+            }
+            0u -> {
+                Toast.makeText(
+                    this,
+                    "USB Mass Storage устройство не найдено или нет разрешения.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            else -> {
+                Toast.makeText(
+                    this,
+                    "Неверный идентификатор устройства: $ret",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private fun openMapActivity() {
+        if (checkLocationPermissions()) {
+            val intent = Intent(this, MapActivity::class.java)
+            startActivity(intent)
+        } else {
+            requestLocationPermissions()
+        }
+    }
+
+    private fun openHistoryActivity() {
+        try {
+            val intent = Intent(this, SimpleHistoryActivity::class.java)
+            startActivity(intent)
+        } catch (e: Exception) {
+            logToUi("Ошибка открытия истории: ${e.message}")
+            Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun enableDebugMode() {
-        // Скрываем overlay
         usbOverlay.visibility = View.GONE
         mainContent.visibility = View.VISIBLE
 
-        // Включаем режим мок-данных
         MockDataManager.enableMockMode()
         usbConnected = true
+        isMockModeActive = true
 
-        // Инициализируем LospDev
+        // Инициализируем LospDev для совместимости
         LospDevVariables.lospDev = LospDev(this)
-        LospDevVariables.log = ::log
-        LospDevVariables.blink_log = ::blink_log
+        LospDevVariables.log = ::logToUi
 
-        // Запускаем мок-данные вместо реальных
         startMockFrequencyLoop()
+        createMockSessionFile()
 
-        // Показываем сообщение
         Toast.makeText(
             this,
             "Включен режим отладки. Используются тестовые данные.",
             Toast.LENGTH_LONG
         ).show()
 
-        // Показываем кнопки карты и истории
-        btnOpenMap.visibility = View.VISIBLE
-        btnOpenHistory.visibility = View.VISIBLE
-
-        // Также сразу показываем лог-контролы (опционально)
-        val logControlContainer = findViewById<View>(R.id.logControlContainer)
+        updateUiState(true)
         logControlContainer.visibility = View.VISIBLE
         logTextView.visibility = View.VISIBLE
         isLogVisible = true
     }
 
-    private fun startFrequencyLoop() {
-        frecJob?.cancel()
-        frecJob = lifecycleScope.launch {
-            while (isActive && usbConnected && lospDev != null) {
-                withContext(Dispatchers.IO) {
-                    try {
-                        if (isAutoModeEnabled) {
-                            frec_tracking(lospDev, LospDevVariables.log)
-                        } else {
-                            frec_exec(lospDev, LospDevVariables.log, isStopFrecExecMeasurment)
-                        }
-                    } catch (e: Exception) {
-                        Log.e("MainActivity", "Ошибка в frequency loop: ${e.message}")
-                    }
-                }
+    private fun createMockSessionFile() {
+        try {
+            val baseDir = File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                "USB_Sensor_Data/Sessions"
+            )
+            if (!baseDir.exists()) {
+                baseDir.mkdirs()
+            }
 
-                var freq: Float = 0f
-                var err: Float? = 0f
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault())
+            val fileName = "mock_session_${dateFormat.format(Date())}.csv"
+            currentMockSessionFile = File(baseDir, fileName)
 
-                if (isAutoModeEnabled) {
-                    freq = 1f / tracking_period_av1.toFloat()
-                    err = (1f / sqrt(tracking_m_sum.toFloat())) / tracking_period_av1.toFloat()
-                } else {
-                    freq = frec_old.toFloat()
-                    err = if (period_acc_old.toInt() == 0) null
-                    else if (accuracy.toFloat() < 1e-99f) freq * period_acc_old.toFloat() / 100f
-                    else period_acc_old.toFloat()
-                }
+            // Создаем заголовок CSV
+            val csvHeader = """
+                # Сессия измерений (Тестовый режим)
+                # Дата создания: ${Date()}
+                # Режим: Отладка (мок-данные)
+                #
+                Timestamp,DateTime,Latitude,Longitude,Altitude,Accuracy(m),Speed(km/h),Frequency(Hz),DoseRate(uSv/h),Temperature(C),UV(W/cm2),Humidity(%),Battery(%),DeviceID,Valid
+                
+            """.trimIndent()
 
-                if (::gauge.isInitialized) {
-                    gauge.frequency = freq
-                    gauge.error = err
-                }
+            currentMockSessionFile?.writeText(csvHeader)
+            logToUi("Создан файл сессии: ${currentMockSessionFile?.name}")
+        } catch (e: Exception) {
+            logToUi("Ошибка создания файла сессии: ${e.message}")
+        }
+    }
 
-                delay(100)
+    private fun appendMockDataToFile(data: MockDataManager.MeasurementData) {
+        currentMockSessionFile?.let { file ->
+            try {
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                val csvRow = "${System.currentTimeMillis()},${dateFormat.format(Date(data.timestamp))},0.0,0.0,0.0,10.0,0.0," +
+                        "${String.format(Locale.US, "%.2f", data.frequency)}," +
+                        "${String.format(Locale.US, "%.6f", data.dose)}," +
+                        "${String.format(Locale.US, "%.1f", data.temperature)}," +
+                        "${String.format(Locale.US, "%.6f", data.uv)},0.0,100,mock_device,1\n"
+
+                file.appendText(csvRow)
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Ошибка записи в файл: ${e.message}")
             }
         }
     }
 
-    /**
-     * Запускает цикл с мок-данными для режима отладки
-     */
-    private fun startMockFrequencyLoop() {
-        frecJob?.cancel()
-        frecJob = lifecycleScope.launch {
-            while (isActive && usbConnected) {
-                // Получаем мок-данные
-                val data = MockDataManager.getMockMeasurement()
+    private fun startFrequencyLoop() {
+        stopAllUpdateJobs()
 
-                // Обновляем UI в главном потоке
-                withContext(Dispatchers.Main) {
-                    // Обновляем датчик частоты
-                    if (::gauge.isInitialized) {
-                        gauge.frequency = data.frequency
-                        gauge.error = data.frequency * 0.05f // 5% погрешность
+        frecJob = lifecycleScope.launch(Dispatchers.IO) {
+            while (isActive && usbConnected && LospDevVariables.lospDev != null && !isMockModeActive) {
+                try {
+                    if (isAutoModeEnabled) {
+                        frec_tracking(LospDevVariables.lospDev, LospDevVariables.log)
+                    } else {
+                        frec_exec(LospDevVariables.lospDev, LospDevVariables.log, isStopFrecExecMeasurment)
                     }
 
-                    // Добавляем запись в лог (если лог виден)
-                    if (isLogVisible) {
-                        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-                            .format(Date(data.timestamp))
-                        val logMsg = """
-                            $timeStr:
-                            Частота: ${"%.2f".format(data.frequency)} Гц
-                            Доза: ${"%.6f".format(data.dose)} мкЗв/ч
-                            Температура: ${"%.1f".format(data.temperature)} °C
-                            УФ: ${"%.6f".format(data.uv)} Вт/см²
-                        """.trimIndent()
+                    var freq: Float = 0f
+                    var err: Float? = 0f
 
-                        if (clearLogSwitch.isChecked) {
-                            logTextView.text = logMsg
-                        } else {
-                            logTextView.append("\n\n$logMsg")
+                    if (isAutoModeEnabled) {
+                        freq = 1f / tracking_period_av1.toFloat()
+                        err = (1f / sqrt(tracking_m_sum.toFloat())) / tracking_period_av1.toFloat()
+                    } else {
+                        freq = frec_old.toFloat()
+                        err = if (period_acc_old.toInt() == 0) null
+                        else if (accuracy.toFloat() < 1e-99f) freq * period_acc_old.toFloat() / 100f
+                        else period_acc_old.toFloat()
+                    }
+
+                    // Обновляем UI в главном потоке
+                    withContext(Dispatchers.Main) {
+                        if (::gauge.isInitialized) {
+                            gauge.frequency = freq
+                            gauge.error = err
                         }
                     }
-                }
 
-                // Задержка между обновлениями
-                delay(1000)
+                    delay(100)
+                } catch (e: CancellationException) {
+                    // Корректное завершение при отмене корутины
+                    Log.d("MainActivity", "Frequency loop cancelled")
+                    break
+                }
             }
         }
+    }
+
+    private fun startMockFrequencyLoop() {
+        stopAllUpdateJobs()
+        isMockModeActive = true
+
+        mockUpdateJob = lifecycleScope.launch(Dispatchers.IO) {
+            while (isActive && usbConnected && isMockModeActive) {
+                try {
+                    val data = MockDataManager.getMockMeasurement()
+
+                    // Обновляем UI и записываем в файл в главном потоке
+                    withContext(Dispatchers.Main) {
+                        // Обновляем датчик
+                        if (::gauge.isInitialized) {
+                            gauge.frequency = data.frequency
+                            gauge.error = data.frequency * 0.05f
+                        }
+
+                        // Добавляем в лог
+                        if (isLogVisible) {
+                            val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+                                .format(Date(data.timestamp))
+                            val logMsg = """
+                                $timeStr:
+                                Частота: ${"%.2f".format(data.frequency)} Гц
+                                Доза: ${"%.6f".format(data.dose)} мкЗв/ч
+                                Температура: ${"%.1f".format(data.temperature)} °C
+                                УФ: ${"%.6f".format(data.uv)} Вт/см²
+                            """.trimIndent()
+
+                            if (clearLogSwitch.isChecked) {
+                                logTextView.text = logMsg
+                            } else {
+                                logTextView.append("\n\n$logMsg")
+                            }
+                        }
+                    }
+
+                    // Записываем в файл
+                    appendMockDataToFile(data)
+
+                    delay(1000)
+                } catch (e: CancellationException) {
+                    // Корректное завершение при отмене корутины
+                    Log.d("MainActivity", "Mock frequency loop cancelled")
+                    break
+                }
+            }
+        }
+    }
+
+    private fun stopAllUpdateJobs() {
+        frecJob?.cancel()
+        mockUpdateJob?.cancel()
+
+        // Даем время на корректное завершение
+        runBlocking {
+            delay(100)
+        }
+
+        frecJob = null
+        mockUpdateJob = null
+        isMockModeActive = false
     }
 
     private fun setupTripleClickToToggleLogs() {
-        val headerText = findViewById<TextView>(R.id.headerText)
-        val logControlContainer = findViewById<View>(R.id.logControlContainer)
-        val logTextView = findViewById<View>(R.id.logTextView)
-
         headerText.setOnClickListener {
             val now = System.currentTimeMillis()
             if (now - lastClickTime <= tripleClickInterval) {
@@ -650,26 +764,123 @@ class MainActivity : AppCompatActivity() {
             lastClickTime = now
 
             if (clickCount == 3) {
-                val newVisibility = if (logControlContainer.isVisible) {
-                    isLogVisible = false
-                    View.GONE
-                } else {
-                    isLogVisible = true
-                    View.VISIBLE
-                }
+                isLogVisible = !isLogVisible
+                val newVisibility = if (isLogVisible) View.VISIBLE else View.GONE
                 logControlContainer.visibility = newVisibility
                 logTextView.visibility = newVisibility
-                btnOpenMap.visibility = newVisibility
-                btnOpenHistory.visibility = newVisibility
                 clickCount = 0
+
+                if (isLogVisible) {
+                    logToUi("Лог включен")
+                }
             }
         }
     }
 
-    // Методы для проверки разрешений GPS
+    private fun initializeLospDev() {
+        FrequencyLogger.init(this)
+        LospDevVariables.lospDev = LospDev(this)
+        LospDevVariables.log = ::logToUi
+
+        gauge.colorZoneProvider = { freq ->
+            when {
+                freq < 10f -> Color.GREEN
+                freq < 25f -> Color.rgb(255, 165, 0)
+                else -> Color.RED
+            }
+        }
+    }
+
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
+    private fun setupUsbReceivers() {
+        val filter = IntentFilter(ACTION_USB_PERMISSION)
+        usbReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+                }
+
+                if (intent.action == ACTION_USB_PERMISSION && device != null) {
+                    synchronized(this) {
+                        if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                            logToUi("Разрешение получено для устройства ${device.deviceName}")
+                        } else {
+                            logToUi("Разрешение отклонено для устройства ${device.deviceName}")
+                        }
+                    }
+                }
+            }
+        }
+
+        // Для Android 14+ используем RECEIVER_NOT_EXPORTED, для старых версий - 0
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(usbReceiver, filter, RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(usbReceiver, filter)
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(usbReceiver, filter)
+        }
+
+        val detachFilter = IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        val detachReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+                }
+
+                if (device != null) {
+                    usbConnected = false
+                    stopAllUpdateJobs()
+                    updateUiState(false)
+                    logToUi("Устройство отключено: ${device.deviceName}")
+                }
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(detachReceiver, detachFilter, RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(detachReceiver, detachFilter)
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(detachReceiver, detachFilter)
+        }
+    }
+
+    private fun initializeLocationClient() {
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+    }
+
+    private fun updateUiState(connected: Boolean) {
+        uiHandler.post {
+            if (connected) {
+                usbOverlay.visibility = View.GONE
+                mainContent.visibility = View.VISIBLE
+            } else {
+                usbOverlay.visibility = View.VISIBLE
+                mainContent.visibility = View.GONE
+            }
+        }
+    }
+
     private fun checkLocationPermissions(): Boolean {
-        return (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+        return (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED)
     }
 
     private fun requestLocationPermissions() {
@@ -679,7 +890,7 @@ class MainActivity : AppCompatActivity() {
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION
             ),
-            101
+            PERMISSION_REQUEST_LOCATION
         )
     }
 
@@ -690,81 +901,73 @@ class MainActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-        if (requestCode == 101) {
-            if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                val intent = Intent(this, MapActivity::class.java)
-                startActivity(intent)
-            } else {
-                Toast.makeText(
-                    this,
-                    "Для отображения карты необходимы разрешения на доступ к местоположению",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
-    }
-
-    /**
-     * Logs the provided message to the on-screen text view with a newline.
-     *
-     * @param message The message string to display in the log area.
-     */
-    @SuppressLint("SetTextI18n")
-    private fun blink_log(message: String) {
-        // Оставьте пустым или добавьте свою логику
-    }
-
-    /**
-     * Logs the provided message to the on-screen text view with a newline.
-     *
-     * @param message The message string to display in the log area.
-     */
-    @SuppressLint("SetTextI18n")
-    private fun log(message: String) {
-        runOnUiThread {
-            if(isLogVisible)
-            {
-                if (clearLogSwitch.isChecked) {
-                    logTextView.text = message
+        when (requestCode) {
+            PERMISSION_REQUEST_LOCATION -> {
+                val allGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+                if (allGranted) {
+                    openMapActivity()
                 } else {
-                    logTextView.append("\n$message")
+                    Toast.makeText(
+                        this,
+                        "Для отображения карты необходимы разрешения на доступ к местоположению",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }
     }
 
-    /**
-     * Called when the activity is about to be destroyed.
-     * Unregisters the USB permission receiver to prevent memory leaks.
-     */
-    override fun onDestroy() {
-        super.onDestroy()
-        // Unregister the USB permission receiver when the activity is destroyed
-        unregisterReceiver(usbReceiver)
-        scope.cancel()
+    @SuppressLint("SetTextI18n")
+    private fun logToUi(message: String) {
+        uiHandler.post {
+            if (isLogVisible) {
+                if (clearLogSwitch.isChecked) {
+                    logTextView.text = "$message\n"
+                } else {
+                    logTextView.append("$message\n")
+                }
+            }
+        }
     }
 
-    /**
-     * Parses a hexadecimal input string into a ByteArray.
-     *
-     * The input string is expected to be a sequence of two-character hexadecimal values, separated by spaces.
-     * The function:
-     * - Trims the input to remove any leading or trailing whitespace.
-     * - Replaces any consecutive whitespace with a single space.
-     * - Splits the string into tokens based on spaces.
-     * - Ensures each token consists of exactly two valid hexadecimal characters (0-9, A-F, a-f).
-     * - Converts each token from hexadecimal to a byte.
-     *
-     * If the input contains invalid tokens (e.g., incorrect length or invalid characters),
-     * the function returns null. If there is an exception during conversion, null is returned.
-     *
-     * @param input The input string containing space-separated hexadecimal values.
-     * @return A ByteArray representing the parsed hexadecimal values, or null if the input is invalid.
-     *
-     * Example:
-     *  - Input: "0A 1F FF"
-     *  - Output: ByteArray with values [0x0A, 0x1F, 0xFF]
-     */
+    override fun onBackPressed() {
+        if (sidebarMenu.visibility == View.VISIBLE) {
+            hideMenu()
+        } else {
+            super.onBackPressed()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Останавливаем только обновления, но не отменяем полностью
+        frecJob?.cancel()
+        mockUpdateJob?.cancel()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (usbConnected) {
+            if (MockDataManager.isInMockMode()) {
+                startMockFrequencyLoop()
+            } else {
+                startFrequencyLoop()
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Полностью останавливаем все корутины
+        stopAllUpdateJobs()
+        try {
+            unregisterReceiver(usbReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Игнорируем если receiver не зарегистрирован
+        }
+    }
+
+    // Вспомогательные методы для работы с USB
     private fun parseHexInput(input: String): ByteArray? {
         val clean = input.trim().replace(Regex("\\s+"), " ")
         val tokens = clean.split(" ")
@@ -776,35 +979,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Converts a hexadecimal string (e.g. "1A 2B 3C") into a ByteArray.
-     *
-     * @param hexString The hexadecimal string to convert.
-     * @return The corresponding ByteArray, or null if the string is invalid.
-     */
     private fun hexStringToByteArray(hexString: String): ByteArray? {
         val clean = hexString.trim().replace(" ", "").uppercase()
         val length = clean.length
-        if (length % 2 != 0) {
-            return null // Invalid string length (should be even)
-        }
+        if (length % 2 != 0) return null
 
-        val bytes = ByteArray(length / 2)
-        for (i in 0 until length step 2) {
-            val hexPair = clean.substring(i, i + 2)
-            bytes[i / 2] = hexPair.toInt(16).toByte()
+        return ByteArray(length / 2).apply {
+            for (i in 0 until length step 2) {
+                val hexPair = clean.substring(i, i + 2)
+                this[i / 2] = hexPair.toInt(16).toByte()
+            }
         }
-        return bytes
     }
 
-    /**
-     * Formats a given byte array as hexadecimal and ASCII representations, with 16 bytes per line.
-     * The output consists of each line displaying the offset (in hexadecimal), the hex values of the bytes,
-     * and the ASCII equivalent of the byte values. Non-printable characters are represented by a period ('.').
-     *
-     * @param data The byte array to be formatted.
-     * @return A string representing the formatted data in both hexadecimal and ASCII, with each line containing 16 bytes.
-     */
     private fun formatSectorAsHexAscii(data: ByteArray): String {
         return data.toList().chunked(16).withIndex().joinToString("\n") { (index, line) ->
             val hex = line.joinToString(" ") { "%02X".format(it) }
@@ -813,33 +1000,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Converts a byte value to a human-readable size representation (e.g. B, KB, MB, GB).
-     * The function scales the input byte value and formats it into the most appropriate size unit
-     * based on the magnitude of the number.
-     *
-     * @param bytes The size in bytes to be formatted.
-     * @return A string representing the size in the most appropriate unit (B, KB, MB, GB).
-     */
     private fun formatSize(bytes: Long): String {
-        val kb = 1024L
-        val mb = kb * 1024L
-        val gb = mb * 1024L
         return when {
-            bytes >= gb -> "%.2f GB".format(bytes.toDouble() / gb)
-            bytes >= mb -> "%.2f MB".format(bytes.toDouble() / mb)
-            bytes >= kb -> "%.2f KB".format(bytes.toDouble() / kb)
+            bytes >= 1024L * 1024 * 1024 -> "%.2f GB".format(bytes.toDouble() / (1024 * 1024 * 1024))
+            bytes >= 1024L * 1024 -> "%.2f MB".format(bytes.toDouble() / (1024 * 1024))
+            bytes >= 1024L -> "%.2f KB".format(bytes.toDouble() / 1024)
             else -> "$bytes B"
         }
     }
 
-    /**
-     * Функция для проверки операций чтения и записи для диапазона секторов.
-     *
-     * @param usbDevice Устройство, с которым выполняется работа
-     * @param count Количество секторов, которые нужно проверить
-     * @return true, если все операции прошли успешно, иначе false
-     */
     fun echoTest(usbDevice: LospDev, count: Long = 0): Boolean {
         val writeBuffer = ByteArray(512)
         val readBuffer = ByteArray(512)
@@ -848,32 +1017,49 @@ class MainActivity : AppCompatActivity() {
             for (sector in 10 until count) {
                 Random.nextBytes(writeBuffer)
 
-                if (!usbDevice.sectorWrite(sector.toUInt(), writeBuffer, ::log)) {
-                    log("EchoTest: Не удалось записать сектор $sector")
+                if (!usbDevice.sectorWrite(sector.toUInt(), writeBuffer, ::logToUi)) {
+                    logToUi("EchoTest: Не удалось записать сектор $sector")
                     return false
                 }
 
                 readBuffer.fill(0)
 
-                if (!usbDevice.sectorRead(sector.toUInt(), readBuffer,::log)) {
-                    log("EchoTest: Не удалось прочитать сектор $sector")
+                if (!usbDevice.sectorRead(sector.toUInt(), readBuffer, ::logToUi)) {
+                    logToUi("EchoTest: Не удалось прочитать сектор $sector")
                     return false
                 }
 
                 if (!writeBuffer.contentEquals(readBuffer)) {
-                    log("EchoTest: Несовпадение данных в секторе $sector")
-                    log("Ожидалось: ${writeBuffer.joinToString(" ") { "%02X".format(it) }}")
-                    log("Получено:  ${readBuffer.joinToString(" ") { "%02X".format(it) }}")
+                    logToUi("EchoTest: Несовпадение данных в секторе $sector")
                     return false
                 }
 
-                log("EchoTest: Сектор $sector успешно проверен")
+                logToUi("EchoTest: Сектор $sector успешно проверен")
             }
-
             return true
         } catch (e: Exception) {
-            log("EchoTest: Ошибка при echoTest: ${e.message}")
+            logToUi("EchoTest: Ошибка при echoTest: ${e.message}")
             return false
         }
+    }
+
+    // Новые методы для поддержки отключения режима отладки
+    fun disableDebugMode() {
+        MockDataManager.disableMockMode()
+        isMockModeActive = false
+        usbConnected = false
+        updateUiState(false)
+        stopAllUpdateJobs()
+
+        Toast.makeText(
+            this,
+            "Режим отладки отключен",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    // Метод для проверки статуса режима отладки
+    fun isDebugModeEnabled(): Boolean {
+        return MockDataManager.isInMockMode()
     }
 }

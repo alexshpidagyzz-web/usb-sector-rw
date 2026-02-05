@@ -12,7 +12,6 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.usb_sector_rw.map.GpsTracker
 import com.example.usb_sector_rw.map.MapRecordingManager
@@ -27,6 +26,7 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -42,32 +42,38 @@ class MapActivity : AppCompatActivity() {
     private lateinit var btnBack: Button
     private lateinit var progressBar: ProgressBar
 
-    // НОВЫЕ КОМПОНЕНТЫ ДЛЯ ЗАПИСИ
+    // Компоненты записи
     private lateinit var btnRecord: Button
     private lateinit var btnExport: Button
     private lateinit var tvStats: TextView
     private lateinit var tvStatus: TextView
     private lateinit var recordingControls: View
 
+    // НОВЫЕ: Компоненты для просмотра сессии
+    private lateinit var sessionInfoPanel: View
+    private lateinit var tvSessionName: TextView
+    private lateinit var tvSessionPoints: TextView
+    private lateinit var tvSessionDistance: TextView
+    private lateinit var btnBackToRecord: Button
+
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
     private var myLocationOverlay: MyLocationNewOverlay? = null
     private var currentMarker: Marker? = null
 
-    // НОВЫЕ: Компоненты для записи
     private lateinit var recordingManager: MapRecordingManager
     private lateinit var gpsTracker: GpsTracker
     private lateinit var routeDrawer: RouteDrawer
-
-    // USB устройство
     private var lospDev: LospDev? = null
 
     private val PERMISSION_REQUEST_CODE = 100
     private var isFirstLocationUpdate = true
+    private var isViewMode = false // false = запись, true = просмотр сессии
 
     companion object {
-        private const val UPDATE_INTERVAL = 5000L // 5 секунд
-        private const val FASTEST_INTERVAL = 2000L // 2 секунды
+        private const val UPDATE_INTERVAL = 5000L
+        private const val FASTEST_INTERVAL = 2000L
+        private const val EXTRA_SESSION_ID = "show_session_id"
     }
 
     @SuppressLint("MissingPermission")
@@ -79,28 +85,10 @@ class MapActivity : AppCompatActivity() {
         Configuration.getInstance().userAgentValue = packageName
 
         // Находим View
-        mapView = findViewById(R.id.mapView)
-        tvLatitude = findViewById(R.id.tvLatitude)
-        tvLongitude = findViewById(R.id.tvLongitude)
-        tvAccuracy = findViewById(R.id.tvAccuracy)
-        tvSpeed = findViewById(R.id.tvSpeed)
-        tvTime = findViewById(R.id.tvTime)
-        btnCenterMap = findViewById(R.id.btnCenterMap)
-        btnBack = findViewById(R.id.btnBack)
-        progressBar = findViewById(R.id.progressBar)
-
-        // НОВЫЕ VIEW ДЛЯ ЗАПИСИ
-        btnRecord = findViewById(R.id.btnRecord)
-        btnExport = findViewById(R.id.btnExport)
-        tvStats = findViewById(R.id.tvStats)
-        tvStatus = findViewById(R.id.tvStatus)
-        recordingControls = findViewById(R.id.recordingControls)
+        initializeViews()
 
         // Настройка карты
-        mapView.setTileSource(TileSourceFactory.MAPNIK)
-        mapView.setMultiTouchControls(true)
-        mapView.setBuiltInZoomControls(true)
-        mapView.controller.setZoom(15.0)
+        setupMap()
 
         // Инициализация FusedLocationProviderClient
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -116,16 +104,75 @@ class MapActivity : AppCompatActivity() {
         recordingManager = MapRecordingManager(this, mapView, myLocationOverlay, lospDev, routeDrawer)
 
         // Настройка callback для обновлений местоположения
+        setupLocationCallback()
+
+        // Настройка кнопок
+        setupButtons()
+
+        // Инициализируем UI менеджера записи
+        recordingManager.initialize(btnRecord, tvStats, tvStatus, btnExport)
+
+        // === ВАЖНО: Проверяем режим открытия активности ===
+        val sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
+        if (!sessionId.isNullOrEmpty()) {
+            // РЕЖИМ ПРОСМОТРА: открыли из истории по кнопке "На карте"
+            isViewMode = true
+            loadAndShowSession(sessionId)
+        } else {
+            // РЕЖИМ ЗАПИСИ: обычное открытие карты
+            isViewMode = false
+            checkAndRequestPermissions()
+        }
+    }
+
+    private fun initializeViews() {
+        mapView = findViewById(R.id.mapView)
+        tvLatitude = findViewById(R.id.tvLatitude)
+        tvLongitude = findViewById(R.id.tvLongitude)
+        tvAccuracy = findViewById(R.id.tvAccuracy)
+        tvSpeed = findViewById(R.id.tvSpeed)
+        tvTime = findViewById(R.id.tvTime)
+        btnCenterMap = findViewById(R.id.btnCenterMap)
+        btnBack = findViewById(R.id.btnBack)
+        progressBar = findViewById(R.id.progressBar)
+
+        // Компоненты записи
+        btnRecord = findViewById(R.id.btnRecord)
+        btnExport = findViewById(R.id.btnExport)
+        tvStats = findViewById(R.id.tvStats)
+        tvStatus = findViewById(R.id.tvStatus)
+        recordingControls = findViewById(R.id.recordingControls)
+
+        // НОВЫЕ: Компоненты для режима просмотра
+        sessionInfoPanel = findViewById(R.id.sessionInfoPanel)
+        tvSessionName = findViewById(R.id.tvSessionName)
+        tvSessionPoints = findViewById(R.id.tvSessionPoints)
+        tvSessionDistance = findViewById(R.id.tvSessionDistance)
+        btnBackToRecord = findViewById(R.id.btnBackToRecord)
+    }
+
+    private fun setupMap() {
+        mapView.setTileSource(TileSourceFactory.MAPNIK)
+        mapView.setMultiTouchControls(true)
+        mapView.setBuiltInZoomControls(true)
+        mapView.controller.setZoom(15.0)
+    }
+
+    private fun setupLocationCallback() {
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 locationResult.lastLocation?.let { location ->
                     updateLocation(location)
-                    // Передаем местоположение в менеджер записи
-                    recordingManager.onLocationUpdate(location)
+                    // Передаем местоположение в менеджер записи (только в режиме записи)
+                    if (!isViewMode) {
+                        recordingManager.onLocationUpdate(location)
+                    }
                 }
             }
         }
+    }
 
+    private fun setupButtons() {
         // Кнопка центрирования карты
         btnCenterMap.setOnClickListener {
             centerMapOnMyLocation()
@@ -136,11 +183,127 @@ class MapActivity : AppCompatActivity() {
             finish()
         }
 
-        // Инициализируем UI менеджера записи
-        recordingManager.initialize(btnRecord, tvStats, tvStatus, btnExport)
+        // НОВАЯ КНОПКА: Вернуться к записи из режима просмотра
+        btnBackToRecord.setOnClickListener {
+            switchToRecordingMode()
+        }
+    }
 
-        // Проверка и запрос разрешений
-        checkAndRequestPermissions()
+    /**
+     * ЗАГРУЗИТЬ И ПОКАЗАТЬ СЕССИЮ НА КАРТЕ
+     */
+    @SuppressLint("SetTextI18n")
+    private fun loadAndShowSession(sessionId: String) {
+        progressBar.visibility = View.VISIBLE
+
+        // Скрываем панель записи, показываем панель сессии
+        recordingControls.visibility = View.GONE
+        sessionInfoPanel.visibility = View.VISIBLE
+
+        Thread {
+            try {
+                // Загружаем сессию из файла
+                val sessionsDir = com.example.usb_sector_rw.measurement.MeasurementSession
+                    .getSessionsDirectory(this@MapActivity)
+                val file = File(sessionsDir, "$sessionId.csv")
+
+                val session = com.example.usb_sector_rw.measurement.MeasurementSession.loadFromFile(file)
+
+                runOnUiThread {
+                    progressBar.visibility = View.GONE
+
+                    if (session != null) {
+                        // 1. Показываем маршрут на карте
+                        routeDrawer.showSessionRoute(session.getMeasurements())
+
+                        // 2. Обновляем информацию о сессии
+                        updateSessionInfo(session)
+
+                        // 3. Центрируем карту на маршруте
+                        routeDrawer.centerMapOnRoute()
+
+                        Toast.makeText(
+                            this@MapActivity,
+                            "Загружена сессия: ${session.name}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            this@MapActivity,
+                            "Сессия не найдена",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        switchToRecordingMode() // Возвращаем в режим записи
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    progressBar.visibility = View.GONE
+                    Toast.makeText(
+                        this@MapActivity,
+                        "Ошибка загрузки: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    switchToRecordingMode()
+                }
+            }
+        }.start()
+    }
+
+    /**
+     * ОБНОВИТЬ ИНФОРМАЦИЮ О СЕССИИ
+     */
+    @SuppressLint("SetTextI18n")
+    private fun updateSessionInfo(session: com.example.usb_sector_rw.measurement.MeasurementSession) {
+        val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault())
+        val startTime = dateFormat.format(Date(session.startTime))
+
+        tvSessionName.text = "Сессия: ${session.name}"
+        tvSessionPoints.text = "Точек: ${session.getMeasurementCount()}"
+        tvSessionDistance.text = "Расстояние: ${String.format("%.2f м", session.totalDistance)}"
+
+        // Обновляем также основные поля
+        tvLatitude.text = "Начало: $startTime"
+        tvLongitude.text = "Длительность: ${session.getDurationFormatted()}"
+        tvAccuracy.text = "Точек: ${session.getMeasurementCount()}"
+        tvSpeed.text = "Расстояние: ${String.format("%.2f м", session.totalDistance)}"
+        tvTime.text = "Ср. скорость: ${String.format("%.2f км/ч", session.averageSpeed)}"
+    }
+
+    /**
+     * ПЕРЕКЛЮЧИТЬСЯ В РЕЖИМ ЗАПИСИ
+     */
+    private fun switchToRecordingMode() {
+        isViewMode = false
+
+        // Показываем панель записи, скрываем панель сессии
+        recordingControls.visibility = View.VISIBLE
+        sessionInfoPanel.visibility = View.GONE
+
+        // Очищаем маршрут просмотра
+        routeDrawer.clearRoute()
+
+        // Запускаем GPS обновления
+        if (checkLocationPermissions()) {
+            startLocationUpdates()
+        } else {
+            checkAndRequestPermissions()
+        }
+
+        // Сбрасываем информацию
+        resetLocationInfo()
+    }
+
+    /**
+     * СБРОСИТЬ ИНФОРМАЦИЮ О МЕСТОПОЛОЖЕНИИ
+     */
+    @SuppressLint("SetTextI18n")
+    private fun resetLocationInfo() {
+        tvLatitude.text = "Широта: -"
+        tvLongitude.text = "Долгота: -"
+        tvAccuracy.text = "Точность: -"
+        tvSpeed.text = "Скорость: -"
+        tvTime.text = "Время: -"
     }
 
     private fun checkAndRequestPermissions() {
@@ -193,8 +356,9 @@ class MapActivity : AppCompatActivity() {
             .addOnSuccessListener { location: Location? ->
                 location?.let {
                     updateLocation(it)
-                    // Передаем первое местоположение в менеджер записи
-                    recordingManager.onLocationUpdate(it)
+                    if (!isViewMode) {
+                        recordingManager.onLocationUpdate(it)
+                    }
                 }
                 progressBar.visibility = View.GONE
             }
@@ -224,7 +388,7 @@ class MapActivity : AppCompatActivity() {
             priority = LocationRequest.PRIORITY_HIGH_ACCURACY
         ) { location ->
             // Обрабатываем обновления от GpsTracker
-            if (recordingManager.isRecording()) {
+            if (!isViewMode && recordingManager.isRecording()) {
                 recordingManager.onLocationUpdate(location)
             }
         }
@@ -292,11 +456,11 @@ class MapActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Показать маршрут из сессии
-     */
-    private fun showSessionRoute(session: com.example.usb_sector_rw.measurement.MeasurementSession) {
-        routeDrawer.showSessionRoute(session.getMeasurements())
+    private fun checkLocationPermissions(): Boolean {
+        return (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED)
     }
 
     override fun onResume() {
@@ -351,6 +515,9 @@ class MapActivity : AppCompatActivity() {
     override fun onBackPressed() {
         if (recordingManager.isRecording()) {
             showRecordingInProgressDialog()
+        } else if (isViewMode) {
+            // В режиме просмотра - возвращаем в режим записи
+            switchToRecordingMode()
         } else {
             super.onBackPressed()
         }

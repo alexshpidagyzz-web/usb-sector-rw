@@ -8,7 +8,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.usb_sector_rw"
+        applicationId = "com.example.usb_sector_rw.dedug"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

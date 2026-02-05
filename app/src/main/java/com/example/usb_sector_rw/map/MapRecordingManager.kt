@@ -10,23 +10,26 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.example.usb_sector_rw.R
-import com.example.usb_sector_rw.measurement.MeasurementRecorder
-import com.example.usb_sector_rw.measurement.MeasurementSession
+import com.example.usb_sector_rw.measurement.*
 import com.example.usb_sector_rw.msd.LospDev
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
+import android.util.Log
 
 class MapRecordingManager(
     private val context: Context,
     private val mapView: MapView,
     private val locationOverlay: MyLocationNewOverlay?,
     private val lospDev: LospDev?,
-    private val routeDrawer: RouteDrawer
+    private val routeDrawer: RouteDrawer // Изменил OptimizeRouteDrawer на RouteDrawer
 ) {
 
     companion object {
         private const val TAG = "MapRecordingManager"
-        private const val UPDATE_INTERVAL_MS = 1000L // Обновление каждую секунду
+        private const val UPDATE_INTERVAL_MS = 1000L
+        private const val DEBOUNCE_DELAY_MS = 500L
     }
 
     // UI компоненты
@@ -47,8 +50,13 @@ class MapRecordingManager(
         }
     }
 
+    // Синхронизация
+    private val recordingLock = ReentrantLock()
+    private val isProcessing = AtomicBoolean(false)
+
     // Состояние
     private var isInitialized = false
+    private var lastButtonClickTime = 0L
 
     /**
      * Инициализация
@@ -72,8 +80,8 @@ class MapRecordingManager(
         measurementRecorder = MeasurementRecorder(context, lospDev)
 
         // Добавляем слушателя для обновления UI при изменении сессии
-        measurementRecorder.addSessionListener { session ->
-            updateStatsDisplay() // ОБНОВЛЯЕМ статистику при каждом новом измерении
+        measurementRecorder.addSessionListener { session: MeasurementSession? ->
+            updateStatsDisplay()
         }
 
         // Настраиваем кнопки
@@ -90,24 +98,29 @@ class MapRecordingManager(
     }
 
     /**
-     * Настройка кнопок
+     * Настройка кнопок с защитой от двойного нажатия
      */
     private fun setupButtons() {
-        // Кнопка записи - ИСПРАВЛЕНО: добавлена защита от двойного нажатия
+        // Кнопка записи с debounce
         recordButton.setOnClickListener {
-            recordButton.isEnabled = false // Блокируем кнопку
+            val now = System.currentTimeMillis()
+            if (now - lastButtonClickTime < DEBOUNCE_DELAY_MS) {
+                return@setOnClickListener
+            }
+            lastButtonClickTime = now
 
-            try {
-                if (measurementRecorder.isRecording()) {
-                    stopRecording()
-                } else {
-                    startRecording()
+            if (isProcessing.compareAndSet(false, true)) {
+                try {
+                    if (measurementRecorder.isRecording()) {
+                        stopRecording()
+                    } else {
+                        startRecording()
+                    }
+                } catch (e: Exception) {
+                    statusTextView.text = "Ошибка: ${e.message}"
+                } finally {
+                    isProcessing.set(false)
                 }
-            } catch (e: Exception) {
-                statusTextView.text = "Ошибка: ${e.message}"
-            } finally {
-                // Разблокируем кнопку через 500мс
-                uiHandler.postDelayed({ recordButton.isEnabled = true }, 500)
             }
         }
 
@@ -118,66 +131,102 @@ class MapRecordingManager(
     }
 
     /**
-     * Начать запись
+     * Начать запись (синхронизировано)
      */
     fun startRecording(sessionName: String = "") {
-        measurementRecorder.startRecording(sessionName)
-        updateUIForRecording(true)
-        statusTextView.text = "Запись..."
-        statusTextView.setTextColor(ContextCompat.getColor(context, R.color.recording_active))
+        recordingLock.lock()
+        try {
+            if (measurementRecorder.isRecording()) {
+                return
+            }
 
-        // Очищаем маршрут при начале новой записи
-        routeDrawer.clearRoute()
+            measurementRecorder.startRecording(sessionName)
+            updateUIForRecording(true)
+            statusTextView.text = "Запись..."
+            statusTextView.setTextColor(ContextCompat.getColor(context, R.color.recording_active))
+
+            // Очищаем маршрут при начале новой записи
+            routeDrawer.clearRoute()
+        } finally {
+            recordingLock.unlock()
+        }
     }
 
     /**
-     * Остановить запись
+     * Остановить запись (синхронизировано)
      */
     fun stopRecording() {
+        recordingLock.lock()
         try {
+            Log.d(TAG, "MapRecordingManager.stopRecording() вызван")
+
+            if (!measurementRecorder.isRecording()) {
+                Log.w(TAG, "Запись уже остановлена")
+                return
+            }
+
+            Log.d(TAG, "=== ОСТАНОВКА ЗАПИСИ ИЗ MapRecordingManager ===")
+
+            // Останавливаем запись через MeasurementRecorder
             measurementRecorder.stopRecording()
+
+            // Обновляем UI
             updateUIForRecording(false)
             statusTextView.text = "Остановлено"
             statusTextView.setTextColor(ContextCompat.getColor(context, R.color.recording_inactive))
+
+            Log.d(TAG, "=== ЗАПИСЬ ОСТАНОВЛЕНА (MapRecordingManager) ===")
+
         } catch (e: Exception) {
+            Log.e(TAG, "Ошибка при остановке записи: ${e.message}", e)
             statusTextView.text = "Ошибка остановки: ${e.message}"
+        } finally {
+            recordingLock.unlock()
         }
     }
 
     /**
-     * Записать одно измерение
+     * Записать одно измерение (синхронизировано)
      */
     fun recordSingleMeasurement(location: Location) {
-        measurementRecorder.recordSingleMeasurement(location)?.let { measurement ->
-            // Добавляем точку на маршрут
-            routeDrawer.addPointToRoute(measurement)
-            // Статистика обновится автоматически через слушателя
+        if (!measurementRecorder.isRecording()) return
+
+        recordingLock.lock()
+        try {
+            measurementRecorder.recordSingleMeasurement(location)?.let { measurement: GeoMeasurement ->
+                // Добавляем точку на маршрут
+                routeDrawer.addPointToRoute(measurement)
+            }
+        } finally {
+            recordingLock.unlock()
         }
     }
 
     /**
-     * Обновить местоположение
+     * Обновить местоположение (с проверкой блокировки)
      */
     fun onLocationUpdate(location: Location) {
-        if (measurementRecorder.isRecording()) {
-            // Автоматическая запись при движении
-            recordSingleMeasurement(location)
+        if (measurementRecorder.isRecording() && recordingLock.tryLock()) {
+            try {
+                // Автоматическая запись при движении
+                recordSingleMeasurement(location)
+            } finally {
+                recordingLock.unlock()
+            }
         }
     }
 
     /**
-     * Обновить отображение статистики - ИСПРАВЛЕНО: показывает актуальное количество точек
+     * Обновить отображение статистики
      */
     private fun updateStatsDisplay() {
         val stats = measurementRecorder.getRecordingStats()
-
-        // Получаем актуальное количество точек ИЗ ТЕКУЩЕЙ СЕССИИ
         val session = measurementRecorder.getCurrentSession()
         val measurementCount = session?.getMeasurementCount() ?: 0
 
         val statsText = buildString {
             append("Статус: ${stats["Статус"] ?: "Неактивно"}\n")
-            append("Точек: $measurementCount\n") // ВСЕГДА показывает актуальное количество
+            append("Точек: $measurementCount\n")
 
             if (measurementCount > 0) {
                 val distance = stats["Расстояние"] ?: "0.00"
@@ -190,22 +239,20 @@ class MapRecordingManager(
             }
         }
 
-        statsTextView.text = statsText
-
-        // Обновляем видимость кнопки экспорта
-        updateExportButtonVisibility(measurementCount)
+        uiHandler.post {
+            statsTextView.text = statsText
+            updateExportButtonVisibility(measurementCount)
+        }
     }
 
     /**
      * Обновить видимость кнопки экспорта
      */
     private fun updateExportButtonVisibility(measurementCount: Int) {
-        uiHandler.post {
-            exportButton.visibility = if (measurementCount > 0) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
+        exportButton.visibility = if (measurementCount > 0) {
+            View.VISIBLE
+        } else {
+            View.GONE
         }
     }
 
@@ -246,15 +293,25 @@ class MapRecordingManager(
 
         statusTextView.text = "Экспорт..."
 
-        // Экспортируем в CSV
-        val exporter = com.example.usb_sector_rw.measurement.FileExporter(context)
-        val result = exporter.exportSessionToCsv(session)
+        // Экспортируем в отдельном потоке
+        Thread {
+            try {
+                val exporter = EnhancedFileExporter(context)
+                val file = exporter.saveSession(session)
 
-        if (result.isSuccess) {
-            statusTextView.text = "Экспортировано: ${result.fileName}"
-        } else {
-            statusTextView.text = "Ошибка экспорта: ${result.errorMessage}"
-        }
+                uiHandler.post {
+                    if (file.exists()) {
+                        statusTextView.text = "Экспортировано: ${file.name}"
+                    } else {
+                        statusTextView.text = "Ошибка экспорта"
+                    }
+                }
+            } catch (e: Exception) {
+                uiHandler.post {
+                    statusTextView.text = "Ошибка: ${e.message}"
+                }
+            }
+        }.start()
     }
 
     /**
@@ -263,7 +320,7 @@ class MapRecordingManager(
     fun cleanup() {
         uiHandler.removeCallbacks(updateStatsRunnable)
         measurementRecorder.cleanup()
-        routeDrawer.clearRoute()
+        // routeDrawer.cleanup() // Убрал, т.к. у RouteDrawer нет метода cleanup
     }
 
     /**

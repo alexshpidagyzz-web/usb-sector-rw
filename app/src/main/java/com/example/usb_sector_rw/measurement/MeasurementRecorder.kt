@@ -5,6 +5,7 @@ import android.content.Context
 import android.location.Location
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.example.usb_sector_rw.msd.LospDev
 import java.util.concurrent.*
 
@@ -16,12 +17,6 @@ class MeasurementRecorder(
         private const val TAG = "MeasurementRecorder"
         private const val DEFAULT_INTERVAL_MS = 5000L
     }
-
-    // Логгер
-    private fun logI(message: String) = println("I/$TAG: $message")
-    private fun logD(message: String) = println("D/$TAG: $message")
-    private fun logW(message: String) = println("W/$TAG: $message")
-    private fun logE(message: String) = println("E/$TAG: $message")
 
     // Текущая сессия
     private var currentSession: MeasurementSession? = null
@@ -75,7 +70,7 @@ class MeasurementRecorder(
         intervalMs: Long = DEFAULT_INTERVAL_MS
     ): MeasurementSession? {
         if (isRecording) {
-            logW("Запись уже идет")
+            Log.w(TAG, "Запись уже идет")
             return currentSession
         }
 
@@ -92,7 +87,8 @@ class MeasurementRecorder(
         // Запускаем периодическую запись
         startRecordingScheduler()
 
-        logI("Запись начата: ${session.name}, интервал: ${recordingIntervalMs}ms")
+        Log.i(TAG, "Запись начата: ${session.name}, интервал: ${recordingIntervalMs}ms")
+        Log.d(TAG, "ID сессии: ${session.id}")
         notifySessionUpdated()
         return session
     }
@@ -102,9 +98,14 @@ class MeasurementRecorder(
      */
     fun stopRecording(saveToFile: Boolean = true): MeasurementSession? {
         if (!isRecording || currentSession == null) {
-            logW("Нет активной сессии для остановки")
+            Log.w(TAG, "Нет активной сессии для остановки")
             return null
         }
+
+        Log.d(TAG, "=== НАЧАЛО ОСТАНОВКИ ЗАПИСИ ===")
+        Log.d(TAG, "Сессия: ${currentSession?.name}")
+        Log.d(TAG, "ID: ${currentSession?.id}")
+        Log.d(TAG, "Измерений: ${currentSession?.getMeasurementCount()}")
 
         // Останавливаем планировщик
         stopRecordingScheduler()
@@ -115,22 +116,38 @@ class MeasurementRecorder(
 
         // Автосохранение
         if (saveToFile && autoSaveEnabled) {
+            Log.d(TAG, "Сохраняем сессию в файл...")
             try {
                 executor.submit {
                     try {
                         val saved = currentSession?.saveToFile(context)
-                        logI("Сессия ${if (saved == true) "сохранена" else "не сохранена"}")
+                        Log.i(TAG, "Результат сохранения: $saved")
+
+                        // Проверяем директорию
+                        val sessionsDir = MeasurementSession.getSessionsDirectory(context)
+                        Log.d(TAG, "Директория сессий: ${sessionsDir.absolutePath}")
+
+                        val files = sessionsDir.listFiles()
+                        if (files != null && files.isNotEmpty()) {
+                            Log.d(TAG, "Файлы в директории:")
+                            files.forEach { file ->
+                                Log.d(TAG, "  - ${file.name} (${file.length()} байт)")
+                            }
+                        } else {
+                            Log.w(TAG, "Нет файлов в директории")
+                        }
                     } catch (e: Exception) {
-                        logE("Ошибка сохранения сессии: ${e.message}")
+                        Log.e(TAG, "Ошибка сохранения сессии: ${e.message}", e)
                     }
                 }
             } catch (e: RejectedExecutionException) {
-                logE("Executor отклонил задачу сохранения: ${e.message}")
+                Log.e(TAG, "Executor отклонил задачу сохранения: ${e.message}")
             }
         }
 
         val session = currentSession!!
-        logI("Запись остановлена: ${session.name}, точек: ${session.getMeasurementCount()}")
+        Log.i(TAG, "Запись остановлена: ${session.name}, точек: ${session.getMeasurementCount()}")
+        Log.d(TAG, "=== ЗАПИСЬ ОСТАНОВЛЕНА ===")
         notifySessionUpdated()
         return session
     }
@@ -147,7 +164,7 @@ class MeasurementRecorder(
 
         val measurement = recordMeasurement(location)
         if (measurement != null) {
-            notifySessionUpdated() // Уведомляем об изменении
+            notifySessionUpdated()
         }
         return measurement
     }
@@ -161,7 +178,7 @@ class MeasurementRecorder(
         val measurement = GeoMeasurement.create(location, lospDev, currentSession!!.id)
         currentSession!!.addMeasurement(measurement)
 
-        logD("Записано измерение: ${measurement.getTimeFormatted()}, " +
+        Log.d(TAG, "Записано измерение: ${measurement.getTimeFormatted()}, " +
                 "координаты: ${measurement.latitude}, ${measurement.longitude}")
 
         return measurement
@@ -177,14 +194,13 @@ class MeasurementRecorder(
 
         scheduledFuture = executor.scheduleAtFixedRate({
             try {
-                logD("Планировщик записи сработал")
-                // Здесь будет автоматическая запись при получении локации
+                Log.d(TAG, "Планировщик записи сработал")
             } catch (e: Exception) {
-                logE("Ошибка в планировщике записи: ${e.message}")
+                Log.e(TAG, "Ошибка в планировщике записи: ${e.message}")
             }
         }, 0, recordingIntervalMs, TimeUnit.MILLISECONDS)
 
-        logI("Планировщик записи запущен с интервалом ${recordingIntervalMs}ms")
+        Log.i(TAG, "Планировщик записи запущен с интервалом ${recordingIntervalMs}ms")
     }
 
     /**
@@ -195,7 +211,7 @@ class MeasurementRecorder(
             if (!it.isCancelled) {
                 it.cancel(true)
                 scheduledFuture = null
-                logI("Планировщик записи остановлен")
+                Log.i(TAG, "Планировщик записи остановлен")
             }
         }
     }
@@ -225,7 +241,7 @@ class MeasurementRecorder(
         return mapOf(
             "Статус" to if (isRecording) "Запись..." else "Остановлено",
             "Сессия" to session.name,
-            "Точек" to session.getMeasurementCount().toString(), // Количество точек БУДЕТ обновляться
+            "Точек" to session.getMeasurementCount().toString(),
             "Время" to formatDuration(elapsedTime),
             "Интервал" to "${recordingIntervalMs / 1000.0} сек",
             "Расстояние" to String.format("%.2f м", session.totalDistance),
@@ -249,6 +265,7 @@ class MeasurementRecorder(
      * Очистка ресурсов
      */
     fun cleanup() {
+        Log.d(TAG, "cleanup() вызван")
         if (isRecording) {
             stopRecording(false)
         }
@@ -262,7 +279,7 @@ class MeasurementRecorder(
             executor.shutdownNow()
         }
 
-        logI("MeasurementRecorder очищен")
+        Log.i(TAG, "MeasurementRecorder очищен")
     }
 
     /**

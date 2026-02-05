@@ -1,6 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
-<paths>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Доступ к внешнему хранилищу -->
+    <external-path
+        name="external_storage"
+        path="." />
+
+    <!-- Доступ к папке Downloads -->
+    <external-path
+        name="downloads"
+        path="Download/" />
+
+    <!-- Доступ к папке приложения в Downloads -->
+    <external-path
+        name="usb_sensor_data"
+        path="Download/USB_Sensor_Data/" />
+
+    <!-- Внутреннее хранилище приложения -->
+    <files-path
+        name="internal_files"
+        path="." />
+
+    <!-- Кэш приложения -->
+    <cache-path
+        name="cache"
+        path="." />
+
+    <!-- Внешние файлы приложения -->
     <external-files-path
-        name="log_files"
+        name="external_files"
+        path="." />
+
+    <!-- Внешний кэш приложения -->
+    <external-cache-path
+        name="external_cache"
         path="." />
 </paths>

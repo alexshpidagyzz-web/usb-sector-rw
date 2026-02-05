@@ -17,6 +17,61 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toTopOf="@id/recordingControls" />
 
+    <!-- === НОВАЯ ПАНЕЛЬ: Информация о сессии (для просмотра из истории) === -->
+    <LinearLayout
+        android:id="@+id/sessionInfoPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#FF4CAF50"
+        android:padding="12dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Название сессии -->
+        <TextView
+            android:id="@+id/tvSessionName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Сессия: --"
+            android:textSize="16sp"
+            android:textColor="@android:color/white"
+            android:textStyle="bold" />
+
+        <!-- Количество точек -->
+        <TextView
+            android:id="@+id/tvSessionPoints"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Точек: --"
+            android:textSize="14sp"
+            android:textColor="@android:color/white"
+            android:layout_marginTop="4dp" />
+
+        <!-- Расстояние -->
+        <TextView
+            android:id="@+id/tvSessionDistance"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Расстояние: --"
+            android:textSize="14sp"
+            android:textColor="@android:color/white"
+            android:layout_marginTop="4dp" />
+
+        <!-- Кнопка вернуться к записи -->
+        <Button
+            android:id="@+id/btnBackToRecord"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Вернуться к записи"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="@android:color/white"
+            android:textColor="#FF4CAF50"
+            android:textStyle="bold" />
+    </LinearLayout>
+
     <!-- Панель управления записью (ПОВЕРХ карты) -->
     <LinearLayout
         android:id="@+id/recordingControls"
@@ -25,7 +80,7 @@
         android:orientation="vertical"
         android:background="#E6000000"
         android:padding="12dp"
-        android:visibility="gone"
+        android:visibility="visible"
         app:layout_constraintBottom_toTopOf="@id/coordinatesContainer"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">

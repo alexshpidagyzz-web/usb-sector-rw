@@ -1,9 +1,9 @@
-// Файл: app/src/main/java/com/example/usb_sector_rw/measurement/SessionManager.kt
 package com.example.usb_sector_rw.measurement
 
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -18,14 +18,12 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-/**
- * Активность для просмотра деталей конкретной сессии
- */
 class SessionManager : AppCompatActivity() {
 
     companion object {
         private const val TAG = "SessionManager"
         private const val EXTRA_SESSION_ID = "session_id"
+        private const val REQUEST_SHOW_ON_MAP = 100
     }
 
     // UI элементы
@@ -43,9 +41,9 @@ class SessionManager : AppCompatActivity() {
     private lateinit var btnSelectAll: Button
     private lateinit var btnDeselectAll: Button
 
-    // Данные
+    // Данные - ИЗМЕНЕНИЕ: инициализируем пустым списком
     private lateinit var session: MeasurementSession
-    private lateinit var measurements: List<GeoMeasurement>
+    private var measurements: List<GeoMeasurement> = emptyList() // ИЗМЕНЕНО
 
     // Адаптер
     private lateinit var adapter: MeasurementAdapter
@@ -55,7 +53,7 @@ class SessionManager : AppCompatActivity() {
     private var isSelectionMode = false
 
     // FileExporter
-    private lateinit var fileExporter: FileExporter
+    private lateinit var fileExporter: EnhancedFileExporter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,6 +61,8 @@ class SessionManager : AppCompatActivity() {
 
         // Получаем ID сессии из Intent
         val sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
+        Log.d(TAG, "Получен sessionId: $sessionId")
+
         if (sessionId.isNullOrEmpty()) {
             Toast.makeText(this, "Ошибка: не указана сессия", Toast.LENGTH_SHORT).show()
             finish()
@@ -73,7 +73,7 @@ class SessionManager : AppCompatActivity() {
         initViews()
 
         // Инициализация FileExporter
-        fileExporter = FileExporter(this)
+        fileExporter = EnhancedFileExporter(this)
 
         // Загрузка сессии
         loadSession(sessionId)
@@ -99,25 +99,77 @@ class SessionManager : AppCompatActivity() {
 
         // Настройка RecyclerView
         recyclerView.layoutManager = LinearLayoutManager(this)
-        adapter = MeasurementAdapter()
+        adapter = MeasurementAdapter(emptyList()) // ИЗМЕНЕНО: передаем пустой список
         recyclerView.adapter = adapter
     }
 
     private fun loadSession(sessionId: String) {
         progressBar.visibility = View.VISIBLE
+        Log.d(TAG, "Ищем файл для sessionId: $sessionId")
 
         Thread {
             try {
                 // Загружаем сессию из файла
                 val sessionsDir = MeasurementSession.getSessionsDirectory(this@SessionManager)
-                val file = File(sessionsDir, "$sessionId.csv")
+                Log.d(TAG, "Директория сессий: ${sessionsDir.absolutePath}")
 
-                val loadedSession = MeasurementSession.loadFromFile(file)
+                // Покажем все файлы в директории
+                val files = sessionsDir.listFiles()
+                files?.forEach { file ->
+                    Log.d(TAG, "Найден файл: ${file.name}")
+                }
+
+                // Пробуем найти файл
+                var foundFile: File? = null
+
+                // 1. Ищем файл с точным совпадением ID
+                foundFile = File(sessionsDir, "$sessionId.csv")
+                if (!foundFile.exists()) {
+                    // 2. Ищем файлы, которые содержат часть ID
+                    val matchingFiles = sessionsDir.listFiles { _, name ->
+                        name.contains(sessionId.take(10)) // Берем первые 10 символов
+                    }
+
+                    if (matchingFiles != null && matchingFiles.isNotEmpty()) {
+                        foundFile = matchingFiles.first()
+                        Log.d(TAG, "Найден файл по части ID: ${foundFile.name}")
+                    }
+                }
+
+                // 3. Берем самый новый файл, если не нашли
+                if (foundFile == null || !foundFile.exists()) {
+                    val newestFile = sessionsDir.listFiles()?.maxByOrNull { it.lastModified() }
+                    if (newestFile != null) {
+                        foundFile = newestFile
+                        Log.d(TAG, "Берем самый новый файл: ${foundFile.name}")
+                    }
+                }
+
+                if (foundFile == null || !foundFile.exists()) {
+                    runOnUiThread {
+                        progressBar.visibility = View.GONE
+                        Toast.makeText(
+                            this@SessionManager,
+                            "Файлы сессий не найдены в директории",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        Log.e(TAG, "Файлы сессий не найдены. Проверьте создаются ли сессии на карте.")
+                        finish()
+                    }
+                    return@Thread
+                }
+
+                Log.d(TAG, "Загружаем файл: ${foundFile.name}")
+                val loadedSession = MeasurementSession.loadFromFile(foundFile)
 
                 if (loadedSession == null) {
                     runOnUiThread {
                         progressBar.visibility = View.GONE
-                        Toast.makeText(this@SessionManager, "Сессия не найдена", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            this@SessionManager,
+                            "Не удалось загрузить сессию",
+                            Toast.LENGTH_SHORT
+                        ).show()
                         finish()
                     }
                     return@Thread
@@ -128,14 +180,25 @@ class SessionManager : AppCompatActivity() {
 
                 runOnUiThread {
                     updateSessionInfo()
-                    adapter.notifyDataSetChanged()
+                    adapter.updateMeasurements(measurements)
                     updateEmptyState()
                     progressBar.visibility = View.GONE
+
+                    btnShowOnMap.isEnabled = measurements.isNotEmpty()
+
+                    Log.d(TAG, "Загружена сессия: ${session.name}")
+                    Log.d(TAG, "Измерений: ${measurements.size}")
+                    Log.d(TAG, "Путь файла: ${foundFile.absolutePath}")
                 }
             } catch (e: Exception) {
                 runOnUiThread {
                     progressBar.visibility = View.GONE
-                    Toast.makeText(this@SessionManager, "Ошибка загрузки: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        this@SessionManager,
+                        "Ошибка загрузки: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    Log.e(TAG, "Ошибка загрузки сессии", e)
                     finish()
                 }
             }
@@ -174,9 +237,11 @@ class SessionManager : AppCompatActivity() {
         if (measurements.isEmpty()) {
             emptyStateView.visibility = View.VISIBLE
             recyclerView.visibility = View.GONE
+            btnShowOnMap.isEnabled = false
         } else {
             emptyStateView.visibility = View.GONE
             recyclerView.visibility = View.VISIBLE
+            btnShowOnMap.isEnabled = true
         }
     }
 
@@ -209,24 +274,6 @@ class SessionManager : AppCompatActivity() {
         // Кнопка отменить все
         btnDeselectAll.setOnClickListener {
             deselectAllMeasurements()
-        }
-
-        // Длинное нажатие на элемент - вход в режим выбора
-        adapter.setOnItemLongClickListener { measurement ->
-            if (!isSelectionMode) {
-                enterSelectionMode()
-            }
-            toggleMeasurementSelection(measurement.id)
-            true
-        }
-
-        // Короткое нажатие на элемент
-        adapter.setOnItemClickListener { measurement ->
-            if (isSelectionMode) {
-                toggleMeasurementSelection(measurement.id)
-            } else {
-                showMeasurementDetails(measurement)
-            }
         }
     }
 
@@ -268,15 +315,35 @@ class SessionManager : AppCompatActivity() {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val fileName = "${session.name.replace(Regex("[^a-zA-Z0-9]"), "_")}_$timestamp.csv"
 
-            val result = fileExporter.exportToExcelCsv(measurementsToExport, fileName)
+            try {
+                // Создаем временный файл с измерениями
+                val tempSession = MeasurementSession(
+                    name = "Выбранные измерения",
+                    startTime = System.currentTimeMillis(),
+                    endTime = System.currentTimeMillis()
+                )
 
-            runOnUiThread {
-                progressBar.visibility = View.GONE
+                // Добавляем измерения в сессию
+                measurementsToExport.forEach { measurement ->
+                    tempSession.addMeasurement(measurement)
+                }
 
-                if (result.isSuccess) {
-                    showExportSuccessDialog(result.file!!)
-                } else {
-                    Toast.makeText(this, "Ошибка экспорта: ${result.errorMessage}", Toast.LENGTH_LONG).show()
+                // Используем saveSession вместо exportToExcelCsv
+                val resultFile = fileExporter.saveSession(tempSession)
+
+                runOnUiThread {
+                    progressBar.visibility = View.GONE
+
+                    if (resultFile != null && resultFile.exists()) {
+                        showExportSuccessDialog(resultFile)
+                    } else {
+                        Toast.makeText(this, "Ошибка экспорта", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    progressBar.visibility = View.GONE
+                    Toast.makeText(this, "Ошибка экспорта: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }.start()
@@ -296,12 +363,18 @@ class SessionManager : AppCompatActivity() {
     }
 
     private fun showExportSuccessDialog(file: File) {
+        val fileSizeKB = if (file.exists()) file.length() / 1024 else 0
+
         AlertDialog.Builder(this)
             .setTitle("Экспорт успешен")
-            .setMessage("Файл сохранен: ${file.name}\n\nРазмер: ${file.length() / 1024} KB")
+            .setMessage("Файл сохранен: ${file.name}\n\nРазмер: ${fileSizeKB} KB")
             .setPositiveButton("Поделиться") { dialog, _ ->
                 val shareIntent = fileExporter.shareFile(file, "Экспорт измерений")
                 startActivity(shareIntent)
+                dialog.dismiss()
+            }
+            .setNeutralButton("Открыть папку") { dialog, _ ->
+                fileExporter.openFileInFileManager(file)
                 dialog.dismiss()
             }
             .setNegativeButton("OK") { dialog, _ ->
@@ -310,10 +383,31 @@ class SessionManager : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * ПОКАЗАТЬ СЕССИЮ НА КАРТЕ
+     */
     private fun showOnMap() {
-        val intent = Intent(this, MapActivity::class.java)
-        intent.putExtra("show_session_id", session.id)
-        startActivity(intent)
+        if (measurements.isEmpty()) {
+            Toast.makeText(this, "Нет измерений для отображения на карте", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val intent = Intent(this, MapActivity::class.java).apply {
+            putExtra("show_session_id", session.id)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+
+        startActivityForResult(intent, REQUEST_SHOW_ON_MAP)
+
+        Toast.makeText(this, "Загружаем маршрут на карту...", Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == REQUEST_SHOW_ON_MAP) {
+            Toast.makeText(this, "Возвращены с карты", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showDeleteConfirmation() {
@@ -354,7 +448,6 @@ class SessionManager : AppCompatActivity() {
     }
 
     private fun deleteSelectedMeasurements() {
-        // TODO: Реализовать удаление выбранных измерений из сессии
         Toast.makeText(this, "Функция в разработке", Toast.LENGTH_SHORT).show()
     }
 
@@ -445,7 +538,15 @@ class SessionManager : AppCompatActivity() {
     /**
      * Адаптер для списка измерений
      */
-    inner class MeasurementAdapter : RecyclerView.Adapter<MeasurementAdapter.ViewHolder>() {
+    inner class MeasurementAdapter(
+        private var measurements: List<GeoMeasurement> // ИЗМЕНЕНО: передаем в конструктор
+    ) : RecyclerView.Adapter<MeasurementAdapter.ViewHolder>() {
+
+        @SuppressLint("NotifyDataSetChanged")
+        fun updateMeasurements(newMeasurements: List<GeoMeasurement>) {
+            measurements = newMeasurements
+            notifyDataSetChanged()
+        }
 
         private var onItemClickListener: ((GeoMeasurement) -> Unit)? = null
         private var onItemLongClickListener: ((GeoMeasurement) -> Unit)? = null
@@ -490,10 +591,10 @@ class SessionManager : AppCompatActivity() {
                 // Цвет фона в зависимости от уровня дозы
                 val doseRate = measurement.doseRate
                 val backgroundColor = when {
-                    doseRate < 0.1f -> 0xFFE8F5E9.toInt() // Светло-зеленый
-                    doseRate < 0.5f -> 0xFFFFF8E1.toInt() // Светло-желтый
-                    doseRate < 1.0f -> 0xFFFFF3E0.toInt() // Светло-оранжевый
-                    else -> 0xFFFFEBEE.toInt() // Светло-красный
+                    doseRate < 0.1f -> 0xFFE8F5E9.toInt()
+                    doseRate < 0.5f -> 0xFFFFF8E1.toInt()
+                    doseRate < 1.0f -> 0xFFFFF3E0.toInt()
+                    else -> 0xFFFFEBEE.toInt()
                 }
                 cardView.setBackgroundColor(backgroundColor)
 

@@ -1,61 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">usb-sector-rw</string>
-    <string name="history_title">История измерений</string>
-    <string name="session_details">Детали сессии</string>
-    <string name="start_recording">Начать запись</string>
-    <string name="stop_recording">Остановить запись</string>
-    <string name="recording">Запись...</string>
-    <string name="stopped">Остановлено</string>
-    <string name="export">Экспорт</string>
-    <string name="delete">Удалить</string>
-    <string name="show_on_map">На карте</string>
-    <string name="select_all">Выбрать все</string>
-    <string name="deselect_all">Снять все</string>
-    <string name="selected_count">Выбрано: %d</string>
-    <string name="no_sessions">Нет сохраненных сессий</string>
-    <string name="no_measurements">Нет измерений</string>
-    <string name="loading">Загрузка...</string>
-    <string name="error_loading">Ошибка загрузки</string>
-    <string name="export_success">Экспорт успешен</string>
-    <string name="export_error">Ошибка экспорта</string>
-    <string name="delete_confirmation">Вы уверены?</string>
-    <string name="delete_session_confirmation">Удалить сессию "%s"?</string>
-    <string name="delete_selected_confirmation">Удалить %d выбранных измерений?</string>
-    <string name="delete_all_confirmation">Удалить все %d сессии?</string>
-    <string name="session_deleted">Сессия удалена</string>
-    <string name="delete_error">Ошибка удаления</string>
-    <string name="latitude">Широта</string>
-    <string name="longitude">Долгота</string>
-    <string name="accuracy">Точность</string>
-    <string name="speed">Скорость</string>
-    <string name="time">Время</string>
-    <string name="frequency">Частота</string>
-    <string name="dose_rate">Мощность дозы</string>
-    <string name="temperature">Температура</string>
-    <string name="uv_radiation">УФ излучение</string>
-    <string name="humidity">Влажность</string>
-    <string name="distance">Расстояние</string>
-    <string name="avg_speed">Ср. скорость</string>
-    <string name="max_speed">Макс. скорость</string>
-    <string name="duration">Продолжительность</string>
-    <string name="measurement_points">Точек измерений</string>
-    <string name="export_formats">Форматы экспорта</string>
-    <string name="format_csv">CSV (Excel)</string>
-    <string name="format_json">JSON</string>
-    <string name="format_kml">KML (Google Earth)</string>
-    <string name="format_zip">ZIP архив</string>
-    <string name="format_selected">Только выбранные</string>
-    <string name="format_all">Весь файл</string>
-    <string name="share">Поделиться</string>
-    <string name="cancel">Отмена</string>
-    <string name="ok">OK</string>
-    <string name="yes">Да</string>
-    <string name="no">Нет</string>
-    <!-- Session Item -->
-    <string name="session_name">Название сессии</string>
-    <string name="session_date">Дата сессии</string>
-    <string name="session_duration">Длительность</string>
-    <string name="session_points">Точки</string>
-    <string name="session_stats">Статистика</string>
-    <string name="select_session">Выбрать сессию</string>
+    <!-- Основные -->
+    <string name="app_name">Radiation meter for PRAM</string>
+    <string name="menu_title">Меню приложения</string>
+    <string name="main_menu">Меню</string>
+    <string name="close_menu">Закрыть меню</string>
+
+    <!-- Единицы измерения -->
+    <string name="hertz">Герцы</string>
+    <string name="rentgen">Рентгены</string>
+
+    <!-- Настройки -->
+    <string name="clear_log">Очищать лог</string>
+
+    <!-- USB экран -->
+    <string name="usb_prompt">Пожалуйста, подключите USB-устройство</string>
+    <string name="usb_connected">Подключено</string>
+    <string name="debug_mode">РЕЖИМ ОТЛАДКИ (БЕЗ USB)</string>
+
+    <!-- Кнопки главного экрана -->
+    <string name="open_map">🗺️ Открыть карту GPS</string>
+    <string name="open_history">📋 История</string>
+
+    <!-- Пункты меню -->
+    <string name="menu_main_screen">Главный экран</string>
+    <string name="menu_gps_map">Карта GPS</string>
+    <string name="menu_history">История измерений</string>
+    <string name="menu_frequency">Измерение частоты</string>
+    <string name="menu_temperature">Измерение температуры</string>
+    <string name="menu_uv">Измерение УФ излучения</string>
+    <string name="menu_graphs">Графики измерений</string>
+    <string name="menu_about">О приложении</string>
+    <string name="menu_exit">Выход</string>
+
+    <!-- Категории меню -->
+    <string name="menu_category_main">Основное</string>
+    <string name="menu_category_tests">Тестовые режимы</string>
+    <string name="menu_category_settings">Настройки</string>
+
+    <!-- Информация -->
+    <string name="app_version">Radiation meter v1.0</string>
+    <string name="copyright">© 2024 PRAM Project</string>
 </resources>
